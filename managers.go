@@ -77,7 +77,6 @@ func scrapeManagers() map[TeamKey]Manager {
 				TeamID:      teamID,
 			}
 			allManagers = append(allManagers, mgr)
-			//fmt.Printf("[Year %d] Found: %s (Team: %s)\n", year, managerName, teamName)
 		}
 	})
 
@@ -89,12 +88,14 @@ func scrapeManagers() map[TeamKey]Manager {
 		ctx := colly.NewContext()
 		ctx.Put("year", year)
 
-		//fmt.Printf("Visiting %d...\n", year)
+		fmt.Printf("Scraping managers for %d...\n", year)
 		err := c.Request("GET", targetURL, nil, ctx, nil)
 		if err != nil {
 			log.Println("Error visiting page:", err)
 		}
 	}
+
+	c.Wait()
 
 	return createLookupTable(allManagers)
 }
