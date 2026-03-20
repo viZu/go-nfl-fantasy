@@ -16,8 +16,9 @@ package main
 // --- Season End Roster
 
 func main() {
-	scrapeManagers()
-	scrapeMatchups()
+	//scrapeManagers()
+	scrapeDrafts()
+	//scrapeMatchups()
 }
 
 type WinLossRecord struct {
