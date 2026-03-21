@@ -19,6 +19,7 @@ func main() {
 	scrapeManagers()
 	scrapeDrafts()
 	scrapeRosters()
+	scrapeStandings()
 	scrapeMatchups()
 }
 
