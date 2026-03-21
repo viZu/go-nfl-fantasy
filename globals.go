@@ -8,7 +8,7 @@ import (
 )
 
 const leagueId = "192834"
-const startYear = 2023
+const startYear = 2024
 const endYear = 2024
 
 var nflCookie string
