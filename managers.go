@@ -11,11 +11,14 @@ import (
 
 // Manager represents the data structure for a single entry
 type Manager struct {
-	Year        int
-	ManagerName string
-	UserID      string
-	TeamName    string
-	TeamID      string
+	Year            int
+	ManagerName     string
+	UserID          string
+	CoManagerName   string
+	CoManagerUserID string
+	TeamName        string
+	TeamID          string
+	TeamImageURL    string
 }
 
 type TeamKey struct {
@@ -64,21 +67,47 @@ func scrapeManagers() map[TeamKey]Manager {
 			userID = matches[1]
 		}
 
+		// 5. Extract Co-Manager Name and User ID (if present)
+		coManagerName := e.ChildText(".teamCoManagerName .userName")
+		coManagerUserID := ""
+		coClassAttr := e.ChildAttr(".teamCoManagerName .userName", "class")
+		if coClassAttr != "" {
+			coMatches := userIDRegex.FindStringSubmatch(coClassAttr)
+			if len(coMatches) > 1 {
+				coManagerUserID = coMatches[1]
+			}
+		}
+
+		// 6. Extract Team Image URL
+		teamImageURL := e.ChildAttr(".teamImg img", "src")
+
 		// Get the year from the context (passed during Request)
 		year := e.Request.Ctx.GetAny("year").(int)
 
 		// Create struct and append only if we found valid data
 		if teamName != "" {
 			mgr := Manager{
-				Year:        year,
-				ManagerName: managerName,
-				UserID:      userID,
-				TeamName:    teamName,
-				TeamID:      teamID,
+				Year:            year,
+				ManagerName:     managerName,
+				UserID:          userID,
+				CoManagerName:   coManagerName,
+				CoManagerUserID: coManagerUserID,
+				TeamName:        teamName,
+				TeamID:          teamID,
+				TeamImageURL:    teamImageURL,
 			}
 			allManagers = append(allManagers, mgr)
-			fmt.Printf("    [Manager] Year: %d | Team ID: %-2s | User ID: %-6s | %-15s (%s)\n",
-				year, teamID, userID, managerName, teamName)
+
+			coMsg := ""
+			if coManagerName != "" {
+				coMsg = fmt.Sprintf(" | Co-Manager: %s (%s)", coManagerName, coManagerUserID)
+			}
+
+			fmt.Printf("    [Manager] Year: %d | Team ID: %-2s | User: %s (%s)%s | Team: %s\n",
+				year, teamID, managerName, userID, coMsg, teamName)
+			if teamImageURL != "" {
+				fmt.Printf("      Img: %s\n", teamImageURL)
+			}
 		}
 	})
 
@@ -107,11 +136,7 @@ func createLookupTable(managers []Manager) map[TeamKey]Manager {
 	lookup := make(map[TeamKey]Manager)
 
 	for _, mgr := range managers {
-		key := TeamKey{
-			Year:   mgr.Year,
-			TeamID: mgr.TeamID,
-		}
-		lookup[key] = mgr
+		lookup[TeamKey{Year: mgr.Year, TeamID: mgr.TeamID}] = mgr
 	}
 
 	return lookup

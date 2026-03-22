@@ -17,13 +17,13 @@ package main
 
 func main() {
 	scrapeManagers()
-	scrapeSettings()
-	scrapeDrafts()
-	scrapeRosters()
-	scrapeStandings()
-	scrapePlayoffs()
-	scrapeEndStandings()
-	scrapeMatchups()
+	//scrapeSettings()
+	//scrapeDrafts()
+	//scrapeRosters()
+	//scrapeStandings()
+	//scrapePlayoffs()
+	//scrapeEndStandings()
+	//scrapeMatchups()
 }
 
 type WinLossRecord struct {
