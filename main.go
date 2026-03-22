@@ -16,12 +16,13 @@ package main
 // --- Season End Roster
 
 func main() {
-	//scrapeManagers()
-	//scrapeDrafts()
-	//scrapeRosters()
-	//scrapeStandings()
+	scrapeManagers()
+	scrapeDrafts()
+	scrapeRosters()
+	scrapeRegularSeasonStandings()
 	scrapePlayoffs()
-	//scrapeMatchups()
+	scrapeEndStandings()
+	scrapeMatchups()
 }
 
 type WinLossRecord struct {
