@@ -31,7 +31,7 @@ type DivisionStanding struct {
 var recordRegex = regexp.MustCompile(`(\d+)-(\d+)-(\d+)`)
 var rankRegex = regexp.MustCompile(`(\d+)\s*\((\d+)\)`)
 
-func scrapeRegularSeasonStandings() {
+func scrapeStandings() {
 	c := createColly(&colly.LimitRule{
 		DomainGlob:  "*fantasy.nfl.com*",
 		Parallelism: 2,

@@ -17,9 +17,10 @@ package main
 
 func main() {
 	scrapeManagers()
+	scrapeSettings()
 	scrapeDrafts()
 	scrapeRosters()
-	scrapeRegularSeasonStandings()
+	scrapeStandings()
 	scrapePlayoffs()
 	scrapeEndStandings()
 	scrapeMatchups()
