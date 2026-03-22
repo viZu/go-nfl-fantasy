@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/PuerkitoBio/goquery"
 	"github.com/gocolly/colly"
 )
 
@@ -30,6 +31,7 @@ type Player struct {
 	teamPosition     string
 	team             string
 	startingPosition string
+	stats            map[string]float32
 }
 
 // Regex helpers
@@ -133,19 +135,33 @@ func scrapeMatchups() {
 			points, _ := strconv.ParseFloat(strings.TrimSpace(pointsStr), 32)
 
 			// 2. Extract Players from the Full Box Score section
-			// In FBS, starters and bench are typically in the same tables, but bench players have BN/RES positions.
 			var starters []Player
 			var bench []Player
 
-			e.ForEach(wrapClass+" .tableWrap table tbody tr", func(_ int, el *colly.HTMLElement) {
-				p := parsePlayerRow(el)
-				if p.id != "" {
-					if p.startingPosition == "BN" || p.startingPosition == "RES" {
-						bench = append(bench, p)
-					} else {
-						starters = append(starters, p)
+			e.ForEach(wrapClass+" .tableWrap table", func(_ int, table *colly.HTMLElement) {
+				// Build header map for stats
+				statHeaders := buildStatHeaders(table)
+
+				table.ForEach("tbody tr", func(_ int, el *colly.HTMLElement) {
+					p := parsePlayerRow(el, statHeaders)
+					if p.id != "" {
+						// Debug Print for Player Stats
+						statsParts := []string{}
+						for k, v := range p.stats {
+							if v != 0 {
+								statsParts = append(statsParts, fmt.Sprintf("%s:%.1f", k, v))
+							}
+						}
+						fmt.Printf("      [Player] %-3s | %-20s | Pts: %6.2f | Stats: %s\n",
+							p.startingPosition, p.name, p.points, strings.Join(statsParts, " "))
+
+						if p.startingPosition == "BN" || p.startingPosition == "RES" {
+							bench = append(bench, p)
+						} else {
+							starters = append(starters, p)
+						}
 					}
-				}
+				})
 			})
 
 			return Matchup{
@@ -183,7 +199,64 @@ func scrapeMatchups() {
 	matchupCollector.Wait()
 }
 
-func parsePlayerRow(e *colly.HTMLElement) Player {
+func buildStatHeaders(table *colly.HTMLElement) []string {
+	var headers []string
+
+	// Map to store groups by column index
+	groupMap := make(map[int]string)
+
+	// First row of header contains groupings
+	table.DOM.Find("thead tr.first th").Each(func(i int, s *goquery.Selection) {
+		groupName := strings.TrimSpace(s.Find("span").Text())
+
+		// Map specific groups as requested
+		lowGroupName := strings.ToLower(groupName)
+		if strings.Contains(lowGroupName, "pat") {
+			groupName = "pat"
+		} else if strings.Contains(lowGroupName, "fg made") {
+			groupName = "fg_made"
+		} else if strings.Contains(lowGroupName, "turnover") {
+			groupName = "turnover"
+		} else if strings.Contains(lowGroupName, "score") {
+			groupName = "score"
+		} else if strings.Contains(lowGroupName, "misc") {
+			groupName = ""
+		}
+
+		colspanStr, _ := s.Attr("colspan")
+		colspan, _ := strconv.Atoi(colspanStr)
+		if colspan == 0 {
+			colspan = 1
+		}
+
+		// We need to track the actual starting index in the final flat list
+		startIdx := len(groupMap)
+		for j := 0; j < colspan; j++ {
+			groupMap[startIdx+j] = strings.ToLower(groupName)
+		}
+	})
+
+	// Second row of header contains individual stat labels
+	table.DOM.Find("thead tr.last th").Each(func(i int, s *goquery.Selection) {
+		if s.HasClass("stat") {
+			statLabel := strings.ToLower(strings.TrimSpace(s.Find("span").Text()))
+			group := groupMap[i]
+
+			fullName := statLabel
+			if group != "" && group != "fantasy" && group != "fum" {
+				fullName = group + "_" + statLabel
+			}
+			headers = append(headers, fullName)
+		} else {
+			// Placeholder for non-stat columns to keep indices aligned
+			headers = append(headers, "")
+		}
+	})
+
+	return headers
+}
+
+func parsePlayerRow(e *colly.HTMLElement, statHeaders []string) Player {
 	// Parse ID
 	idStr := ""
 	nameClass := e.ChildAttr(".playerNameAndInfo .playerName", "class")
@@ -191,7 +264,7 @@ func parsePlayerRow(e *colly.HTMLElement) Player {
 		idStr = matches[1]
 	}
 
-	// Parse Name - .playerName in FBS view contains the full name
+	// Parse Name
 	name := e.ChildText(".playerNameAndInfo .playerName")
 
 	// Parse Position
@@ -211,6 +284,18 @@ func parsePlayerRow(e *colly.HTMLElement) Player {
 	ptsStr = strings.ReplaceAll(ptsStr, "-", "0")
 	pts, _ := strconv.ParseFloat(strings.TrimSpace(ptsStr), 32)
 
+	// Parse Stats
+	stats := make(map[string]float32)
+	e.DOM.Find("td").Each(func(i int, s *goquery.Selection) {
+		if i < len(statHeaders) && statHeaders[i] != "" {
+			valStr := strings.TrimSpace(s.Text())
+			valStr = strings.ReplaceAll(valStr, "-", "0")
+			valStr = strings.ReplaceAll(valStr, ",", "")
+			val, _ := strconv.ParseFloat(valStr, 32)
+			stats[statHeaders[i]] = float32(val)
+		}
+	})
+
 	return Player{
 		id:               idStr,
 		name:             name,
@@ -218,5 +303,6 @@ func parsePlayerRow(e *colly.HTMLElement) Player {
 		points:           float32(pts),
 		teamPosition:     teamPosition,
 		team:             team,
+		stats:            stats,
 	}
 }

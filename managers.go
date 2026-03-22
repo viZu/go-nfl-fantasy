@@ -77,6 +77,8 @@ func scrapeManagers() map[TeamKey]Manager {
 				TeamID:      teamID,
 			}
 			allManagers = append(allManagers, mgr)
+			fmt.Printf("    [Manager] Year: %d | Team ID: %-2s | User ID: %-6s | %-15s (%s)\n",
+				year, teamID, userID, managerName, teamName)
 		}
 	})
 
