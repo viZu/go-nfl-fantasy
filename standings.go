@@ -1,70 +1,83 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
+	"os"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/gocolly/colly"
 )
 
 type TeamStanding struct {
-	TeamID        string
-	TeamName      string
-	DivisionRank  int
-	OverallRank   int
-	Wins          int
-	Losses        int
-	Draws         int
-	PointsFor     float32
-	PointsAgainst float32
+	TeamID        string  `json:"teamId"`
+	TeamName      string  `json:"teamName"`
+	DivisionRank  int     `json:"divisionRank"`
+	OverallRank   int     `json:"overallRank"`
+	Wins          int     `json:"wins"`
+	Losses        int     `json:"losses"`
+	Draws         int     `json:"draws"`
+	PointsFor     float32 `json:"pointsFor"`
+	PointsAgainst float32 `json:"pointsAgainst"`
 }
 
 type DivisionStanding struct {
-	Year         int
-	DivisionName string
-	Teams        []TeamStanding
+	Year         int            `json:"year"`
+	DivisionId   int            `json:"divisionId"`
+	DivisionName string         `json:"divisionName"`
+	Teams        []TeamStanding `json:"teams"`
 }
 
 var recordRegex = regexp.MustCompile(`(\d+)-(\d+)-(\d+)`)
 var rankRegex = regexp.MustCompile(`(\d+)\s*\((\d+)\)`)
+var divisionRegex = regexp.MustCompile(`Division\s+(\d+):\s*(.*)`)
 
 func scrapeStandings() {
+	fmt.Println("Scraping regular season standings...")
 	c := createColly(&colly.LimitRule{
 		DomainGlob:  "*fantasy.nfl.com*",
 		Parallelism: 2,
 	})
 
+	var allDivisions []DivisionStanding
+	var mu sync.Mutex
+
 	c.OnHTML("#leagueHistoryStandings .bd", func(e *colly.HTMLElement) {
 		year := e.Request.Ctx.GetAny("year").(int)
 		hasDivisions := e.DOM.Find(".tableWrap.hasDivisions").Length() > 0
 
-		var allDivisions []DivisionStanding
-
 		e.ForEach(".tableWrap", func(_ int, el *colly.HTMLElement) {
-			divName := el.ChildText("h4, h5")
+			divRaw := el.ChildText("h4, h5")
 
 			// If we have divisions, the tables with division names are the ones we want.
 			// The table without a name is typically the "Overall Standings" which we skip to avoid duplicates.
-			if hasDivisions && divName == "" {
+			if hasDivisions && divRaw == "" {
 				return
 			}
 
-			if divName == "" {
-				divName = "Regular Season"
-			} else {
-				// Clean up division name (e.g., "Division 1: Dirty South" -> "Dirty South" or keep it)
-				// The prompt says: "The division name is within .tableWrap.first h4"
-				// Example: <h5 class="first"><em>Division 1</em>: Dirty South</h5>
-				// ChildText will return "Division 1: Dirty South"
-				divName = strings.TrimSpace(divName)
+			divisionId := 1
+			divisionName := "Regular Season"
+
+			if divRaw != "" {
+				divRaw = strings.TrimSpace(divRaw)
+				if matches := divisionRegex.FindStringSubmatch(divRaw); len(matches) > 2 {
+					divisionId, _ = strconv.Atoi(matches[1])
+					divisionName = matches[2]
+				} else {
+					divisionName = divRaw
+				}
 			}
 
 			division := DivisionStanding{
 				Year:         year,
-				DivisionName: divName,
+				DivisionId:   divisionId,
+				DivisionName: divisionName,
+				Teams:        make([]TeamStanding, 0),
 			}
 
 			el.ForEach("table tbody tr", func(_ int, tr *colly.HTMLElement) {
@@ -126,12 +139,9 @@ func scrapeStandings() {
 			})
 
 			if len(division.Teams) > 0 {
+				mu.Lock()
 				allDivisions = append(allDivisions, division)
-				fmt.Printf("    [Standings] Year: %d | Division: %s | Teams: %d\n", year, division.DivisionName, len(division.Teams))
-				for _, t := range division.Teams {
-					fmt.Printf("        %-2s | %-25s | %d-%d-%d | PF: %8.2f | PA: %8.2f\n",
-						t.TeamID, t.TeamName, t.Wins, t.Losses, t.Draws, t.PointsFor, t.PointsAgainst)
-				}
+				mu.Unlock()
 			}
 		})
 	})
@@ -141,7 +151,6 @@ func scrapeStandings() {
 		ctx := colly.NewContext()
 		ctx.Put("year", year)
 
-		fmt.Printf("Scraping regular season standings for %d...\n", year)
 		err := c.Request("GET", targetURL, nil, ctx, nil)
 		if err != nil {
 			log.Println("Error visiting standings page:", err)
@@ -149,4 +158,28 @@ func scrapeStandings() {
 	}
 
 	c.Wait()
+
+	// Sort by Year (ascending) and then by DivisionId (ascending)
+	sort.Slice(allDivisions, func(i, j int) bool {
+		if allDivisions[i].Year != allDivisions[j].Year {
+			return allDivisions[i].Year < allDivisions[j].Year
+		}
+		return allDivisions[i].DivisionId < allDivisions[j].DivisionId
+	})
+
+	// Write to JSON file
+	file, err := os.Create("regular-season-standings-history.json")
+	if err != nil {
+		log.Printf("Error creating regular-season-standings-history.json: %v\n", err)
+		return
+	}
+	defer file.Close()
+
+	encoder := json.NewEncoder(file)
+	encoder.SetIndent("", "  ")
+	if err := encoder.Encode(allDivisions); err != nil {
+		log.Printf("Error encoding regular season standings to JSON: %v\n", err)
+	} else {
+		fmt.Println("Successfully saved regular season standings to regular-season-standings-history.json")
+	}
 }

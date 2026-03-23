@@ -20,9 +20,9 @@ func main() {
 	//scrapeSettings()
 	//scrapeDrafts()
 	//scrapeRosters()
-	//scrapeStandings()
+	scrapeStandings()
 	//scrapePlayoffs()
-	scrapeEndStandings()
+	//scrapeEndStandings()
 	//scrapeMatchups()
 }
 
