@@ -16,9 +16,9 @@ package main
 // --- Season End Roster
 
 func main() {
-	//scrapeManagers()
+	scrapeManagers()
 	//scrapeSettings()
-	scrapeDrafts()
+	//scrapeDrafts()
 	//scrapeRosters()
 	//scrapeStandings()
 	//scrapePlayoffs()

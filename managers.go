@@ -1,24 +1,29 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/url"
+	"os"
 	"regexp"
+	"sort"
+	"strconv"
+	"sync"
 
 	"github.com/gocolly/colly"
 )
 
 // Manager represents the data structure for a single entry
 type Manager struct {
-	Year            int
-	ManagerName     string
-	UserID          string
-	CoManagerName   string
-	CoManagerUserID string
-	TeamName        string
-	TeamID          string
-	TeamImageURL    string
+	Year            int     `json:"year"`
+	ManagerName     string  `json:"managerName"`
+	UserID          string  `json:"userId"`
+	CoManagerName   *string `json:"coManagerName"`
+	CoManagerUserID *string `json:"coUserId"`
+	TeamName        string  `json:"teamName"`
+	TeamID          string  `json:"teamId"`
+	TeamImageURL    string  `json:"teamImgUrl"`
 }
 
 type TeamKey struct {
@@ -26,7 +31,8 @@ type TeamKey struct {
 	TeamID string
 }
 
-func scrapeManagers() map[TeamKey]Manager {
+func scrapeManagers() {
+	fmt.Println("Scraping managers...")
 	c := createColly(nil)
 
 	// Compile regex for extracting numeric IDs from class strings (e.g., "userId-12345")
@@ -34,6 +40,7 @@ func scrapeManagers() map[TeamKey]Manager {
 
 	// Slice to hold all scraped data
 	var allManagers []Manager
+	var mu sync.Mutex
 
 	// OnHTML callback for the table rows
 	// Based on your file: <table class="tableType-team"> -> <tbody> -> <tr>
@@ -68,14 +75,23 @@ func scrapeManagers() map[TeamKey]Manager {
 		}
 
 		// 5. Extract Co-Manager Name and User ID (if present)
-		coManagerName := e.ChildText(".teamCoManagerName .userName")
-		coManagerUserID := ""
+		coManagerNameRaw := e.ChildText(".teamCoManagerName .userName")
+		var coManagerName *string
+		if coManagerNameRaw != "" {
+			coManagerName = &coManagerNameRaw
+		}
+
+		coManagerUserIDRaw := ""
 		coClassAttr := e.ChildAttr(".teamCoManagerName .userName", "class")
 		if coClassAttr != "" {
 			coMatches := userIDRegex.FindStringSubmatch(coClassAttr)
 			if len(coMatches) > 1 {
-				coManagerUserID = coMatches[1]
+				coManagerUserIDRaw = coMatches[1]
 			}
+		}
+		var coManagerUserID *string
+		if coManagerUserIDRaw != "" {
+			coManagerUserID = &coManagerUserIDRaw
 		}
 
 		// 6. Extract Team Image URL
@@ -96,18 +112,10 @@ func scrapeManagers() map[TeamKey]Manager {
 				TeamID:          teamID,
 				TeamImageURL:    teamImageURL,
 			}
+
+			mu.Lock()
 			allManagers = append(allManagers, mgr)
-
-			coMsg := ""
-			if coManagerName != "" {
-				coMsg = fmt.Sprintf(" | Co-Manager: %s (%s)", coManagerName, coManagerUserID)
-			}
-
-			fmt.Printf("    [Manager] Year: %d | Team ID: %-2s | User: %s (%s)%s | Team: %s\n",
-				year, teamID, managerName, userID, coMsg, teamName)
-			if teamImageURL != "" {
-				fmt.Printf("      Img: %s\n", teamImageURL)
-			}
+			mu.Unlock()
 		}
 	})
 
@@ -119,7 +127,6 @@ func scrapeManagers() map[TeamKey]Manager {
 		ctx := colly.NewContext()
 		ctx.Put("year", year)
 
-		fmt.Printf("Scraping managers for %d...\n", year)
 		err := c.Request("GET", targetURL, nil, ctx, nil)
 		if err != nil {
 			log.Println("Error visiting page:", err)
@@ -128,10 +135,34 @@ func scrapeManagers() map[TeamKey]Manager {
 
 	c.Wait()
 
-	return createLookupTable(allManagers)
+	// Sort by Year (ascending) and then by TeamID (numerically ascending)
+	sort.Slice(allManagers, func(i, j int) bool {
+		if allManagers[i].Year != allManagers[j].Year {
+			return allManagers[i].Year < allManagers[j].Year
+		}
+		idI, _ := strconv.Atoi(allManagers[i].TeamID)
+		idJ, _ := strconv.Atoi(allManagers[j].TeamID)
+		return idI < idJ
+	})
+
+	// Write to JSON file
+	file, err := os.Create("managers-history.json")
+	if err != nil {
+		log.Printf("Error creating managers-history.json: %v\n", err)
+		return
+	}
+	defer file.Close()
+
+	encoder := json.NewEncoder(file)
+	encoder.SetIndent("", "  ")
+	if err := encoder.Encode(allManagers); err != nil {
+		log.Printf("Error encoding manager history to JSON: %v\n", err)
+	} else {
+		fmt.Println("Successfully saved manager history to managers-history.json")
+	}
 }
 
-// Function to convert slice to lookup map
+// Function to convert slice to lookup map - kept for reference or other usage if needed, but not returned by scrapeManagers anymore
 func createLookupTable(managers []Manager) map[TeamKey]Manager {
 	lookup := make(map[TeamKey]Manager)
 
