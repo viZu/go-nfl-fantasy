@@ -269,6 +269,7 @@ func parsePlayerRow(e *colly.HTMLElement, statHeaders []string) Player {
 
 	// Parse Position
 	startingPosition := e.ChildText(".teamPosition")
+	startingPosition = mapToSleeperPosition(startingPosition)
 	teamPositionText := e.ChildText(".playerNameAndInfo em")
 	teamPosition := ""
 	team := ""

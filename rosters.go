@@ -110,6 +110,7 @@ func parseRosterPlayerRow(e *colly.HTMLElement) RosterPlayer {
 
 	// 3. Roster Position (Starting position on the team)
 	rosterPos := e.ChildText(".teamPosition")
+	rosterPos = mapToSleeperPosition(rosterPos)
 
 	// 4. Team and Position Info
 	teamPosText := e.ChildText(".playerNameAndInfo em")
@@ -142,4 +143,24 @@ func parseRosterPlayerRow(e *colly.HTMLElement) RosterPlayer {
 		Points:         float32(pts),
 		IsStarting:     isStarting,
 	}
+}
+
+func mapToSleeperPosition(pos string) string {
+	pos = strings.TrimSpace(pos)
+	if pos == "W/T" {
+		return "REC_FLEX"
+	}
+	if pos == "W/R" {
+		return "WRRB_FLEX"
+	}
+	if pos == "R/W/T" {
+		return "FLEX"
+	}
+	if pos == "Q/R/W/T" || pos == "SuperFlex" {
+		return "SUPER_FLEX"
+	}
+	if strings.Contains(pos, "/") || strings.Contains(pos, "\\") {
+		return "FLEX"
+	}
+	return pos
 }

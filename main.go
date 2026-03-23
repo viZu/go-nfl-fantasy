@@ -17,7 +17,7 @@ package main
 
 func main() {
 	//scrapeManagers() // writes to file
-	scrapeSettings()
+	//scrapeSettings()
 	//scrapeDrafts() // writes to file
 	//scrapeRosters()
 	//scrapeStandings() // writes to file
