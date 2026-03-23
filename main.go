@@ -16,13 +16,13 @@ package main
 // --- Season End Roster
 
 func main() {
-	//scrapeManagers()
-	//scrapeSettings()
-	//scrapeDrafts()
+	//scrapeManagers() // writes to file
+	scrapeSettings()
+	//scrapeDrafts() // writes to file
 	//scrapeRosters()
-	scrapeStandings()
+	//scrapeStandings() // writes to file
 	//scrapePlayoffs()
-	//scrapeEndStandings()
+	//scrapeEndStandings()  // writes to file
 	//scrapeMatchups()
 }
 

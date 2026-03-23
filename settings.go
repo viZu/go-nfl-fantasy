@@ -145,7 +145,7 @@ func mapSleeperScoring(category, stat string) []string {
 			return []string{"st_td"}
 		case strings.Contains(s, "fumble recovered for td"):
 			return []string{"fum_rec_td"}
-		case strings.Contains(s, "fumble lost"):
+		case strings.Contains(s, "fumbles lost"):
 			return []string{"fum_lost"}
 		case strings.Contains(s, "2-point conversions"):
 			return []string{"pass_2pt", "rush_2pt", "rec_2pt"}
@@ -215,6 +215,8 @@ func mapSleeperScoring(category, stat string) []string {
 			return []string{"yds_allow_450_499"}
 		case strings.Contains(s, "500+ yards allowed"):
 			return []string{"yds_allow_500_549", "yds_allow_550p"}
+		case strings.Contains(s, "team def 2-point return"):
+			return []string{"def_2pt"}
 		}
 	}
 
