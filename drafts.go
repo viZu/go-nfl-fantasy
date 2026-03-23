@@ -19,11 +19,13 @@ type DraftPick struct {
 	Round      int    `json:"round"`
 	PickNumber int    `json:"pick"`
 	TeamID     string `json:"teamId"`
+	TeamName   string `json:"teamName"`
 	PlayerID   string `json:"playerId"`
 	PlayerName string `json:"playerName"`
 }
 
 func scrapeDrafts() {
+	fmt.Println("Scraping draft results...")
 	c := createColly(&colly.LimitRule{
 		DomainGlob:  "*fantasy.nfl.com*",
 		Parallelism: 2,
@@ -64,14 +66,13 @@ func scrapeDrafts() {
 			}
 
 			if playerName != "" {
-				fmt.Printf("    [Draft] Year: %d | Rnd: %-2d | Pick: %-3d | Team ID: %-2s | Team: %-20s | Player: %s (%s)\n",
-					year, round, pickNumber, teamID, teamName, playerName, playerID)
 
 				pick := DraftPick{
 					Year:       year,
 					Round:      round,
 					PickNumber: pickNumber,
 					TeamID:     teamID,
+					TeamName:   teamName,
 					PlayerID:   playerID,
 					PlayerName: playerName,
 				}
@@ -90,7 +91,6 @@ func scrapeDrafts() {
 		ctx := colly.NewContext()
 		ctx.Put("year", year)
 
-		fmt.Printf("Scraping draft results for %d...\n", year)
 		err := c.Request("GET", targetURL, nil, ctx, nil)
 		if err != nil {
 			log.Println("Error visiting page:", err)
