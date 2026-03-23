@@ -18,11 +18,11 @@ package main
 func main() {
 	//scrapeManagers()
 	//scrapeSettings()
-	scrapeDrafts()
+	//scrapeDrafts()
 	//scrapeRosters()
 	//scrapeStandings()
 	//scrapePlayoffs()
-	//scrapeEndStandings()
+	scrapeEndStandings()
 	//scrapeMatchups()
 }
 
