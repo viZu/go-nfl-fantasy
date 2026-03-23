@@ -1,23 +1,26 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
+	"os"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/gocolly/colly"
 )
 
 type DraftPick struct {
-	Year       int
-	Round      int
-	PickNumber int
-	PlayerID   string
-	PlayerName string
-	TeamID     string
-	TeamName   string
+	Year       int    `json:"year"`
+	Round      int    `json:"round"`
+	PickNumber int    `json:"pick"`
+	TeamID     string `json:"teamId"`
+	PlayerID   string `json:"playerId"`
+	PlayerName string `json:"playerName"`
 }
 
 func scrapeDrafts() {
@@ -27,6 +30,9 @@ func scrapeDrafts() {
 	})
 
 	roundRegex := regexp.MustCompile(`Round (\d+)`)
+
+	allPicks := make([]DraftPick, 0)
+	var mu sync.Mutex
 
 	c.OnHTML(".results .wrap", func(e *colly.HTMLElement) {
 		year := e.Request.Ctx.GetAny("year").(int)
@@ -60,6 +66,20 @@ func scrapeDrafts() {
 			if playerName != "" {
 				fmt.Printf("    [Draft] Year: %d | Rnd: %-2d | Pick: %-3d | Team ID: %-2s | Team: %-20s | Player: %s (%s)\n",
 					year, round, pickNumber, teamID, teamName, playerName, playerID)
+
+				pick := DraftPick{
+					Year:       year,
+					Round:      round,
+					PickNumber: pickNumber,
+					TeamID:     teamID,
+					PlayerID:   playerID,
+					PlayerName: playerName,
+				}
+
+				// Safely append to the shared slice across concurrent workers
+				mu.Lock()
+				allPicks = append(allPicks, pick)
+				mu.Unlock()
 			}
 		})
 	})
@@ -78,4 +98,28 @@ func scrapeDrafts() {
 	}
 
 	c.Wait()
+
+	// Sort by Year (ascending) and then by PickNumber (ascending)
+	sort.Slice(allPicks, func(i, j int) bool {
+		if allPicks[i].Year != allPicks[j].Year {
+			return allPicks[i].Year < allPicks[j].Year
+		}
+		return allPicks[i].PickNumber < allPicks[j].PickNumber
+	})
+
+	// Write to JSON file
+	file, err := os.Create("draft-history.json")
+	if err != nil {
+		log.Printf("Error creating draft-history.json: %v\n", err)
+		return
+	}
+	defer file.Close()
+
+	encoder := json.NewEncoder(file)
+	encoder.SetIndent("", "  ")
+	if err := encoder.Encode(allPicks); err != nil {
+		log.Printf("Error encoding draft history to JSON: %v\n", err)
+	} else {
+		fmt.Println("Successfully saved draft history to draft-history.json")
+	}
 }
