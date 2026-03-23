@@ -120,7 +120,12 @@ func parseRosterPlayerRow(e *colly.HTMLElement) RosterPlayer {
 		teamPos = matches[1]
 		team = matches[2]
 	} else {
-		teamPos = teamPosText
+		if strings.Contains(teamPosText, "DEF") {
+			team = mapTeamAbbreviation(name)
+			teamPos = "DEF"
+		} else {
+			teamPos = teamPosText
+		}
 	}
 
 	// 5. Points
@@ -143,24 +148,4 @@ func parseRosterPlayerRow(e *colly.HTMLElement) RosterPlayer {
 		Points:         float32(pts),
 		IsStarting:     isStarting,
 	}
-}
-
-func mapToSleeperPosition(pos string) string {
-	pos = strings.TrimSpace(pos)
-	if pos == "W/T" {
-		return "REC_FLEX"
-	}
-	if pos == "W/R" {
-		return "WRRB_FLEX"
-	}
-	if pos == "R/W/T" {
-		return "FLEX"
-	}
-	if pos == "Q/R/W/T" || pos == "SuperFlex" {
-		return "SUPER_FLEX"
-	}
-	if strings.Contains(pos, "/") || strings.Contains(pos, "\\") {
-		return "FLEX"
-	}
-	return pos
 }

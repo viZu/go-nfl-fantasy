@@ -277,7 +277,12 @@ func parsePlayerRow(e *colly.HTMLElement, statHeaders []string) Player {
 		teamPosition = matches[1]
 		team = matches[2]
 	} else {
-		teamPosition = teamPositionText
+		if strings.Contains(teamPositionText, "DEF") {
+			team = mapTeamAbbreviation(name)
+			teamPosition = "DEF"
+		} else {
+			teamPosition = teamPositionText
+		}
 	}
 
 	// Parse Points

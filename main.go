@@ -23,7 +23,7 @@ func main() {
 	//scrapeStandings() // writes to file
 	//scrapePlayoffs()
 	//scrapeEndStandings()  // writes to file
-	//scrapeMatchups()
+	scrapeMatchups()
 }
 
 type WinLossRecord struct {
