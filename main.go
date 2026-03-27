@@ -19,34 +19,9 @@ func main() {
 	//scrapeManagers() // writes to file
 	//scrapeSettings()
 	//scrapeDrafts() // writes to file
-	//scrapeRosters()
+	//scrapeRosters() // writes to file
 	//scrapeStandings() // writes to file
 	//scrapePlayoffs()
 	//scrapeEndStandings()  // writes to file
-	scrapeMatchups()
-}
-
-type WinLossRecord struct {
-	Wins   int
-	Losses int
-	Draws  int
-}
-
-type RegularSeasonTeam struct {
-	TotalRank     int
-	DivisionRank  int
-	Record        WinLossRecord
-	PointsFor     float32
-	PointsAgainst float32
-}
-
-type RegularSeasonDivision struct {
-	SortOrder int
-	Name      string
-	Teams     []RegularSeasonTeam
-}
-
-type RegularSeasonResults struct {
-	Year      int
-	Divisions []RegularSeasonDivision
+	//scrapeMatchups()
 }

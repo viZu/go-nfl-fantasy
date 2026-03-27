@@ -1,31 +1,40 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
+	"os"
+	"regexp"
+	"sort"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/gocolly/colly"
 )
 
+var rosterTeamIDRegex = regexp.MustCompile(`teamId=(\d+)`)
+
 type TeamRoster struct {
-	Year    int
-	TeamID  string
-	Players []RosterPlayer
+	Year    int            `json:"year"`
+	TeamID  string         `json:"teamId"`
+	Players []RosterPlayer `json:"players"`
 }
 
 type RosterPlayer struct {
-	PlayerID       string
-	PlayerName     string
-	RosterPosition string // e.g., QB, RB, BN, RES
-	Team           string // NFL Team
-	TeamPosition   string // e.g., QB, RB
-	Points         float32
-	IsStarting     bool
+	StarterType    string  `json:"starterType"`
+	PlayerName     string  `json:"playerName"`
+	PlayerID       string  `json:"playerId"`
+	RosterPosition string  `json:"rosterPosition"`
+	Team           string  `json:"team"`
+	TeamPosition   string  `json:"teamPosition"`
+	Points         float32 `json:"points"`
 }
 
 func scrapeRosters() {
+	fmt.Println("Scraping rosters...")
+
 	c := createColly(&colly.LimitRule{
 		DomainGlob:  "*fantasy.nfl.com*",
 		Parallelism: 2,
@@ -35,6 +44,9 @@ func scrapeRosters() {
 		DomainGlob:  "*fantasy.nfl.com*",
 		Parallelism: 4,
 	})
+
+	var allRosters []TeamRoster
+	var mu sync.Mutex
 
 	// 1. Visit the Owners page to find all team links
 	c.OnHTML(".tableType-team tbody tr", func(e *colly.HTMLElement) {
@@ -54,8 +66,8 @@ func scrapeRosters() {
 
 		// Extract Team ID
 		teamID := ""
-		classAttr := e.ChildAttr(".teamImg", "class")
-		if matches := teamIDRegex.FindStringSubmatch(classAttr); len(matches) > 1 {
+		formAction := e.ChildAttr("form", "action")
+		if matches := rosterTeamIDRegex.FindStringSubmatch(formAction); len(matches) > 1 {
 			teamID = matches[1]
 		}
 
@@ -66,17 +78,17 @@ func scrapeRosters() {
 			p := parseRosterPlayerRow(el)
 			if p.PlayerID != "" {
 				players = append(players, p)
-				status := "Starter"
-				if !p.IsStarting {
-					status = "Bench"
-				}
-				fmt.Printf("    [Roster] Year: %d | Team: %-2s | %-7s | %-22s | %-3s | %-3s | %6.2f\n",
-					year, teamID, status, p.PlayerName, p.RosterPosition, p.Team, p.Points)
 			}
 		})
 
 		if len(players) > 0 {
-			fmt.Printf("Completed Roster: Year %d, Team %s, Total Players: %d\n", year, teamID, len(players))
+			mu.Lock()
+			allRosters = append(allRosters, TeamRoster{
+				Year:    year,
+				TeamID:  teamID,
+				Players: players,
+			})
+			mu.Unlock()
 		}
 	})
 
@@ -86,15 +98,40 @@ func scrapeRosters() {
 		ctx := colly.NewContext()
 		ctx.Put("year", year)
 
-		fmt.Printf("Finding teams for roster scraping in %d...\n", year)
 		err := c.Request("GET", targetURL, nil, ctx, nil)
 		if err != nil {
-			log.Println("Error visiting owners page:", err)
+			log.Printf("Error visiting owners page for year %d: %v\n", year, err)
 		}
 	}
 
 	c.Wait()
 	rosterCollector.Wait()
+
+	// 5. Sort by 1. Year and 2. TeamID (numeric)
+	sort.Slice(allRosters, func(i, j int) bool {
+		if allRosters[i].Year != allRosters[j].Year {
+			return allRosters[i].Year < allRosters[j].Year
+		}
+		idI, _ := strconv.Atoi(allRosters[i].TeamID)
+		idJ, _ := strconv.Atoi(allRosters[j].TeamID)
+		return idI < idJ
+	})
+
+	// 4. Write to JSON file
+	file, err := os.Create("end-roster-history.json")
+	if err != nil {
+		log.Printf("Error creating end-roster-history.json: %v\n", err)
+		return
+	}
+	defer file.Close()
+
+	encoder := json.NewEncoder(file)
+	encoder.SetIndent("", "  ")
+	if err := encoder.Encode(allRosters); err != nil {
+		log.Printf("Error encoding rosters to JSON: %v\n", err)
+	} else {
+		fmt.Println("Successfully saved rosters to end-roster-history.json")
+	}
 }
 
 func parseRosterPlayerRow(e *colly.HTMLElement) RosterPlayer {
@@ -110,15 +147,31 @@ func parseRosterPlayerRow(e *colly.HTMLElement) RosterPlayer {
 
 	// 3. Roster Position (Starting position on the team)
 	rosterPos := e.ChildText(".teamPosition")
-	rosterPos = mapToSleeperPosition(rosterPos)
+	rosterPosMapped := mapToSleeperPosition(rosterPos)
+
+	// Determine Starter Type
+	starterType := "starter"
+	if rosterPos == "BN" {
+		starterType = "bench"
+	} else if rosterPos == "RES" {
+		starterType = "reserve"
+	}
 
 	// 4. Team and Position Info
 	teamPosText := e.ChildText(".playerNameAndInfo em")
 	teamPos := ""
 	team := ""
 	if matches := playerTeamAndPositionRegex.FindStringSubmatch(teamPosText); len(matches) > 1 {
-		teamPos = matches[1]
-		team = matches[2]
+		part1 := matches[1]
+		part2 := matches[2]
+
+		if part2 == "DEF" {
+			team = mapTeamAbbreviation(part1)
+			teamPos = "DEF"
+		} else {
+			team = part1
+			teamPos = part2
+		}
 	} else {
 		if strings.Contains(teamPosText, "DEF") {
 			team = mapTeamAbbreviation(name)
@@ -133,19 +186,13 @@ func parseRosterPlayerRow(e *colly.HTMLElement) RosterPlayer {
 	ptsStr = strings.ReplaceAll(ptsStr, "-", "0")
 	pts, _ := strconv.ParseFloat(strings.TrimSpace(ptsStr), 32)
 
-	// 6. Check if Starter or Bench
-	isStarting := true
-	if rosterPos == "BN" || rosterPos == "RES" {
-		isStarting = false
-	}
-
 	return RosterPlayer{
-		PlayerID:       idStr,
+		StarterType:    starterType,
 		PlayerName:     name,
-		RosterPosition: rosterPos,
+		PlayerID:       idStr,
+		RosterPosition: rosterPosMapped,
 		Team:           team,
 		TeamPosition:   teamPos,
 		Points:         float32(pts),
-		IsStarting:     isStarting,
 	}
 }
