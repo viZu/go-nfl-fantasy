@@ -1,37 +1,48 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
+	"os"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/gocolly/colly"
 )
 
-type PlayoffMatchup struct {
-	Year        int
-	Week        int
-	RoundName   string
-	BracketType string
-	Team1ID     string
-	Team1Points float32
-	Team2ID     string
-	Team2Points float32
-	WinnerID    string
+type PlayoffGame struct {
+	Year        int     `json:"year"`
+	Week        int     `json:"week"`
+	Round       int     `json:"round"`
+	RoundLabel  string  `json:"roundLabel"`
+	BracketType string  `json:"bracketType"`
+	Team1       string  `json:"team1"`
+	Team2       string  `json:"team2"`
+	Team1Points float32 `json:"team1Points"`
+	Team2Points float32 `json:"team2Points"`
+	Winner      string  `json:"winner"`
 }
 
 // Local regex for playoff week labels
 var playoffWeekRegex = regexp.MustCompile(`Week (\d+)`)
 
 func scrapePlayoffs() {
+	fmt.Println("Scraping playoffs...")
+
 	c := createColly(&colly.LimitRule{
 		DomainGlob:  "*fantasy.nfl.com*",
 		Parallelism: 2,
 	})
 
+	var allGames []PlayoffGame
+	var mu sync.Mutex
+
 	c.OnHTML("ul.playoffContent > li", func(e *colly.HTMLElement) {
+		year := e.Request.Ctx.GetAny("year").(int)
 		bracketType := e.Request.Ctx.Get("bracketType")
 
 		// Extract Week Number from the round header
@@ -72,10 +83,22 @@ func scrapePlayoffs() {
 			}
 
 			if team1ID != "" && team2ID != "" {
-				// Matchup ID info (as requested in objective)
-				// Format: { "week": week, "teamId": team1ID }
-				fmt.Printf("    [Playoffs] %-12s | Week %d | %-20s | T1: %-2s (%6.2f) vs T2: %-2s (%6.2f) | Winner: %s\n",
-					bracketType, week, roundLabel, team1ID, t1Points, team2ID, t2Points, winnerID)
+				game := PlayoffGame{
+					Year:        year,
+					Week:        week,
+					Round:       getPlayoffRoundNumber(roundLabel),
+					RoundLabel:  roundLabel,
+					BracketType: bracketType,
+					Team1:       team1ID,
+					Team2:       team2ID,
+					Team1Points: float32(t1Points),
+					Team2Points: float32(t2Points),
+					Winner:      winnerID,
+				}
+
+				mu.Lock()
+				allGames = append(allGames, game)
+				mu.Unlock()
 			}
 		})
 	})
@@ -87,7 +110,6 @@ func scrapePlayoffs() {
 		ctxChamp.Put("year", year)
 		ctxChamp.Put("bracketType", "Championship")
 
-		fmt.Printf("Scraping Championship playoffs for %d...\n", year)
 		err := c.Request("GET", champURL, nil, ctxChamp, nil)
 		if err != nil {
 			log.Printf("Error requesting Championship playoffs for %d: %v", year, err)
@@ -99,7 +121,6 @@ func scrapePlayoffs() {
 		ctxCons.Put("year", year)
 		ctxCons.Put("bracketType", "Consolation")
 
-		fmt.Printf("Scraping Consolation playoffs for %d...\n", year)
 		err = c.Request("GET", consURL, nil, ctxCons, nil)
 		if err != nil {
 			log.Printf("Error requesting Consolation playoffs for %d: %v", year, err)
@@ -107,4 +128,42 @@ func scrapePlayoffs() {
 	}
 
 	c.Wait()
+
+	// Sort by Year (ascending) and then by Week (ascending)
+	sort.Slice(allGames, func(i, j int) bool {
+		if allGames[i].Year != allGames[j].Year {
+			return allGames[i].Year < allGames[j].Year
+		}
+		return allGames[i].Week < allGames[j].Week
+	})
+
+	// Write to JSON file
+	file, err := os.Create("playoff-history.json")
+	if err != nil {
+		log.Printf("Error creating playoff-history.json: %v\n", err)
+		return
+	}
+	defer file.Close()
+
+	encoder := json.NewEncoder(file)
+	encoder.SetIndent("", "  ")
+	if err := encoder.Encode(allGames); err != nil {
+		log.Printf("Error encoding playoff history to JSON: %v\n", err)
+	} else {
+		fmt.Println("Successfully saved playoff history to playoff-history.json")
+	}
+}
+
+func getPlayoffRoundNumber(label string) int {
+	l := strings.ToLower(label)
+	if strings.Contains(l, "quarterfinal") {
+		return 1
+	}
+	if strings.Contains(l, "semifinal") {
+		return 2
+	}
+	if strings.Contains(l, "final") || strings.Contains(l, "bowl") || strings.Contains(l, "place") || strings.Contains(l, "championship") {
+		return 3
+	}
+	return 0
 }
