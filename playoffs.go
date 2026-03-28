@@ -29,6 +29,7 @@ type PlayoffGame struct {
 
 // Local regex for playoff week labels
 var playoffWeekRegex = regexp.MustCompile(`Week (\d+)`)
+var playoffWeekIndexRegex = regexp.MustCompile(`pw-(\d+)`)
 
 func scrapePlayoffs() {
 	fmt.Println("Scraping playoffs...")
@@ -37,6 +38,7 @@ func scrapePlayoffs() {
 		DomainGlob:  "*fantasy.nfl.com*",
 		Parallelism: 2,
 	})
+	c.Async = false
 
 	var allGames []PlayoffGame
 	var mu sync.Mutex
@@ -50,6 +52,12 @@ func scrapePlayoffs() {
 		week := 0
 		if matches := playoffWeekRegex.FindStringSubmatch(weekStr); len(matches) > 1 {
 			week, _ = strconv.Atoi(matches[1])
+		}
+
+		weekIndexStr := e.Attr("class")
+		roundNumber := 0
+		if matches := playoffWeekIndexRegex.FindStringSubmatch(weekIndexStr); len(matches) > 1 {
+			roundNumber, _ = strconv.Atoi(matches[1])
 		}
 
 		// Iterate over matchups in this round
@@ -86,7 +94,7 @@ func scrapePlayoffs() {
 				game := PlayoffGame{
 					Year:        year,
 					Week:        week,
-					Round:       getPlayoffRoundNumber(roundLabel),
+					Round:       roundNumber + 1,
 					RoundLabel:  roundLabel,
 					BracketType: bracketType,
 					Team1:       team1ID,
@@ -129,10 +137,13 @@ func scrapePlayoffs() {
 
 	c.Wait()
 
-	// Sort by Year (ascending) and then by Week (ascending)
+	// Sort by Year (ascending), BracketType (ascending), and then by Week (ascending)
 	sort.Slice(allGames, func(i, j int) bool {
 		if allGames[i].Year != allGames[j].Year {
 			return allGames[i].Year < allGames[j].Year
+		}
+		if allGames[i].BracketType != allGames[j].BracketType {
+			return allGames[i].BracketType < allGames[j].BracketType
 		}
 		return allGames[i].Week < allGames[j].Week
 	})
@@ -152,18 +163,4 @@ func scrapePlayoffs() {
 	} else {
 		fmt.Println("Successfully saved playoff history to playoff-history.json")
 	}
-}
-
-func getPlayoffRoundNumber(label string) int {
-	l := strings.ToLower(label)
-	if strings.Contains(l, "quarterfinal") {
-		return 1
-	}
-	if strings.Contains(l, "semifinal") {
-		return 2
-	}
-	if strings.Contains(l, "final") || strings.Contains(l, "bowl") || strings.Contains(l, "place") || strings.Contains(l, "championship") {
-		return 3
-	}
-	return 0
 }
