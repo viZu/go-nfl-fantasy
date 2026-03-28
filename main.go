@@ -17,11 +17,11 @@ package main
 
 func main() {
 	//scrapeManagers() // writes to file
-	//scrapeSettings()
+	//scrapeSettings() // writes to file
 	//scrapeDrafts() // writes to file
 	//scrapeRosters() // writes to file
 	//scrapeStandings() // writes to file
-	//scrapePlayoffs()
+	//scrapePlayoffs() // writes to file
 	//scrapeEndStandings()  // writes to file
 	//scrapeMatchups()
 }

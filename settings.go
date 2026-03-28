@@ -1,48 +1,67 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
+	"os"
+	"sort"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/gocolly/colly"
 )
 
-type LeagueSettings struct {
-	Year            int
-	RosterSettings  map[string]string
-	ScoringSettings map[string]map[string]string
+type SeasonSettings struct {
+	Year            int                `json:"year"`
+	RosterPositions map[string]int     `json:"rosterPositions"`
+	OffenseSettings map[string]float64 `json:"offenseSettings"`
+	KickingSettings map[string]float64 `json:"kickingSettings"`
+	DSTSettings     map[string]float64 `json:"dstSettings"`
+	OtherSettings   map[string]string  `json:"otherSettings"`
 }
 
 func scrapeSettings() {
+	fmt.Println("Scraping league settings...")
+
 	c := createColly(&colly.LimitRule{
 		DomainGlob:  "*fantasy.nfl.com*",
 		Parallelism: 2,
 	})
 
+	var allSettings []SeasonSettings
+	var mu sync.Mutex
+
 	c.OnHTML(".confirmationPreview", func(e *colly.HTMLElement) {
 		year := e.Request.Ctx.GetAny("year").(int)
 
-		fmt.Printf("    [Settings] Year: %d\n", year)
+		settings := SeasonSettings{
+			Year:            year,
+			RosterPositions: make(map[string]int),
+			OffenseSettings: make(map[string]float64),
+			KickingSettings: make(map[string]float64),
+			DSTSettings:     make(map[string]float64),
+			OtherSettings:   make(map[string]string),
+		}
 
 		// Roster Positions
-		fmt.Println("      Roster Positions:")
 		e.ForEach(".positionsAndRoster li", func(_ int, el *colly.HTMLElement) {
 			pos := strings.TrimSuffix(strings.TrimSpace(el.ChildText("em")), ":")
-			val := strings.TrimSpace(el.ChildText(".value"))
+			valStr := strings.TrimSpace(el.ChildText(".value"))
+			val, _ := strconv.Atoi(valStr)
 
-			// Simple mapping attempt for Sleeper comparison
 			sleeperPos := mapSleeperPosition(pos)
-			fmt.Printf("        %-25s: %-10s (Sleeper: %s)\n", pos, val, sleeperPos)
+			if sleeperPos != "UNKNOWN" {
+				settings.RosterPositions[sleeperPos] += val
+			}
 		})
 
 		// Scoring Settings
-		fmt.Println("      Scoring Settings:")
 		e.ForEach(".scoreSettings h5.settingsHeader", func(_ int, el *colly.HTMLElement) {
 			category := strings.TrimSpace(el.Text)
-			fmt.Printf("        Category: %s\n", category)
+			catLower := strings.ToLower(category)
 
 			nextDiv := el.DOM.NextAllFiltered("div.settingsContent").First()
 			nextDiv.Find("li").Each(func(_ int, s *goquery.Selection) {
@@ -59,11 +78,33 @@ func scrapeSettings() {
 				}
 
 				sleeperKeys := mapSleeperScoring(category, displayStat)
-				parsedVal := parseNFLValue(valStr)
 
-				fmt.Printf("          %-40s: %-25s -> %-20s | Value: %.4f\n", displayStat, valStr, strings.Join(sleeperKeys, ", "), parsedVal)
+				if len(sleeperKeys) == 1 && sleeperKeys[0] == "UNKNOWN" {
+					settings.OtherSettings[stat] = valStr
+				} else {
+					parsedVal := parseNFLValue(valStr)
+					if strings.Contains(catLower, "offense") || strings.Contains(catLower, "fumble") {
+						for _, key := range sleeperKeys {
+							settings.OffenseSettings[key] = parsedVal
+						}
+					} else if strings.Contains(catLower, "kicking") {
+						for _, key := range sleeperKeys {
+							settings.KickingSettings[key] = parsedVal
+						}
+					} else if strings.Contains(catLower, "defense") {
+						for _, key := range sleeperKeys {
+							settings.DSTSettings[key] = parsedVal
+						}
+					} else {
+						settings.OtherSettings[stat] = valStr
+					}
+				}
 			})
 		})
+
+		mu.Lock()
+		allSettings = append(allSettings, settings)
+		mu.Unlock()
 	})
 
 	for year := startYear; year <= endYear; year++ {
@@ -71,7 +112,6 @@ func scrapeSettings() {
 		ctx := colly.NewContext()
 		ctx.Put("year", year)
 
-		fmt.Printf("Scraping league settings for %d...\n", year)
 		err := c.Request("GET", targetURL, nil, ctx, nil)
 		if err != nil {
 			log.Printf("Error requesting settings for %d: %v", year, err)
@@ -79,6 +119,27 @@ func scrapeSettings() {
 	}
 
 	c.Wait()
+
+	// Sort by Year
+	sort.Slice(allSettings, func(i, j int) bool {
+		return allSettings[i].Year < allSettings[j].Year
+	})
+
+	// Write to JSON file
+	file, err := os.Create("settings-history.json")
+	if err != nil {
+		log.Printf("Error creating settings-history.json: %v\n", err)
+		return
+	}
+	defer file.Close()
+
+	encoder := json.NewEncoder(file)
+	encoder.SetIndent("", "  ")
+	if err := encoder.Encode(allSettings); err != nil {
+		log.Printf("Error encoding settings to JSON: %v\n", err)
+	} else {
+		fmt.Println("Successfully saved settings to settings-history.json")
+	}
 }
 
 func mapSleeperPosition(nflPos string) string {
@@ -117,7 +178,7 @@ func mapSleeperScoring(category, stat string) []string {
 
 	switch {
 	// Offense
-	case strings.Contains(cat, "offense"):
+	case strings.Contains(cat, "offense") || strings.Contains(cat, "fumble"):
 		switch {
 		case strings.Contains(s, "passing yards"):
 			return []string{"pass_yd"}
