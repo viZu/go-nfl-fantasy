@@ -4,24 +4,24 @@ import (
 	"strings"
 )
 
-func mapToSleeperPosition(pos string) string {
+func mapToSleeperPosition(pos string) (string, string) {
 	pos = strings.TrimSpace(pos)
-	if pos == "W/T" {
-		return "REC_FLEX"
+	if pos == "QB" || pos == "RB" || pos == "WR" || pos == "TE" || pos == "DEF" || pos == "K" {
+		return pos, "ST"
 	}
 	if pos == "W/R" {
-		return "WRRB_FLEX"
+		return "WRRB_FLEX", "ST"
 	}
 	if pos == "R/W/T" {
-		return "FLEX"
+		return "FLEX", "ST"
 	}
 	if pos == "Q/R/W/T" || pos == "SuperFlex" {
-		return "SUPER_FLEX"
+		return "SUPER_FLEX", "ST"
 	}
 	if strings.Contains(pos, "/") || strings.Contains(pos, "\\") {
-		return "FLEX"
+		return "FLEX", "ST"
 	}
-	return pos
+	return pos, pos
 }
 
 func mapTeamAbbreviation(teamName string) string {

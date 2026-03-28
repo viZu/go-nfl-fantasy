@@ -147,15 +147,7 @@ func parseRosterPlayerRow(e *colly.HTMLElement) RosterPlayer {
 
 	// 3. Roster Position (Starting position on the team)
 	rosterPos := e.ChildText(".teamPosition")
-	rosterPosMapped := mapToSleeperPosition(rosterPos)
-
-	// Determine Starter Type
-	starterType := "starter"
-	if rosterPos == "BN" {
-		starterType = "bench"
-	} else if rosterPos == "RES" {
-		starterType = "reserve"
-	}
+	rosterPosMapped, rosterStatus := mapToSleeperPosition(rosterPos)
 
 	// 4. Team and Position Info
 	teamPosText := e.ChildText(".playerNameAndInfo em")
@@ -187,7 +179,7 @@ func parseRosterPlayerRow(e *colly.HTMLElement) RosterPlayer {
 	pts, _ := strconv.ParseFloat(strings.TrimSpace(ptsStr), 32)
 
 	return RosterPlayer{
-		StarterType:    starterType,
+		StarterType:    rosterStatus,
 		PlayerName:     name,
 		PlayerID:       idStr,
 		RosterPosition: rosterPosMapped,

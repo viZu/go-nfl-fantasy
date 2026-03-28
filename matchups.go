@@ -1,10 +1,13 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/url"
+	"os"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -14,31 +17,36 @@ import (
 	"github.com/gocolly/colly"
 )
 
-type Matchup struct {
-	matchupId int
-	year      int
-	week      int
-	team      int
-	points    float32
-	starters  []Player
-	bench     []Player
+type MatchupHistory struct {
+	Year      int         `json:"year"`
+	MatchupID string      `json:"matchupId"`
+	Week      int         `json:"week"`
+	Team1     TeamMatchup `json:"team1"`
+	Team2     TeamMatchup `json:"team2"`
 }
 
-type Player struct {
-	id               string
-	name             string
-	points           float32
-	teamPosition     string
-	team             string
-	startingPosition string
-	stats            map[string]float32
+type TeamMatchup struct {
+	TeamID      string          `json:"teamId"`
+	TotalPoints float32         `json:"totalPoints"`
+	Players     []MatchupPlayer `json:"players"`
+}
+
+type MatchupPlayer struct {
+	PlayerID         string             `json:"id"`
+	PlayerName       string             `json:"name"`
+	Status           string             `json:"status"` // "ST", "BN", "RES"
+	StartingPosition string             `json:"pos"`
+	Team             string             `json:"team"`
+	TeamPosition     string             `json:"teamPos"`
+	Points           float32            `json:"points"`
+	Stats            map[string]float32 `json:"stats"`
 }
 
 // Regex helpers
 var playerTeamAndPositionRegex = regexp.MustCompile(`(.*) - (.*)`)
 var teamIDRegex = regexp.MustCompile(`teamId-(\d+)`)
 var playerIDRegex = regexp.MustCompile(`playerNameId-(\d+)`)
-var weekRegex = regexp.MustCompile(`week=(\d+)`) // To extract week from URL if needed
+var weekRegex = regexp.MustCompile(`week=(\d+)`)
 
 func transformToFBS(originalURL string) (string, error) {
 	u, err := url.Parse(originalURL)
@@ -53,11 +61,11 @@ func transformToFBS(originalURL string) (string, error) {
 }
 
 func scrapeMatchups() {
-	// Storage
-	var allMatchups []Matchup
+	fmt.Println("Scraping matchups...")
+
+	var allMatchups []MatchupHistory
 	var mu sync.Mutex
 
-	year := endYear
 	scheduleCollector := createColly(&colly.LimitRule{
 		DomainGlob:  "*fantasy.nfl.com*",
 		Parallelism: 2,
@@ -65,13 +73,9 @@ func scrapeMatchups() {
 		RandomDelay: 500 * time.Millisecond,
 	})
 
-	// Base URLs
-	baseURL := "https://fantasy.nfl.com"
-	startURL := fmt.Sprintf("%s/league/%s/history/%d/schedule", baseURL, leagueId, year)
-
 	matchupCollector := createColly(&colly.LimitRule{
 		DomainGlob:  "*fantasy.nfl.com*",
-		Parallelism: 2,
+		Parallelism: 4,
 		Delay:       100 * time.Millisecond,
 		RandomDelay: 250 * time.Millisecond,
 	})
@@ -86,11 +90,11 @@ func scrapeMatchups() {
 
 	// B. Find Matchups on the current Schedule Page
 	scheduleCollector.OnHTML("ul.scheduleContent", func(e *colly.HTMLElement) {
+		year := e.Request.Ctx.GetAny("year").(int)
 		weekStr := e.DOM.ParentsUntil("div.mod").Find("ul.scheduleWeekNav li.selected .title span").Text()
 		week, _ := strconv.Atoi(strings.TrimSpace(weekStr))
 
 		e.ForEach("li.matchup", func(i int, el *colly.HTMLElement) {
-			matchupIdx := i + 1
 			link := el.ChildAttr(".matchupLink a", "href")
 			if link != "" {
 				absURL := e.Request.AbsoluteURL(link)
@@ -101,9 +105,8 @@ func scrapeMatchups() {
 				}
 
 				ctx := colly.NewContext()
-				ctx.Put("matchupId", strconv.Itoa(matchupIdx))
-				ctx.Put("year", strconv.Itoa(year))
-				ctx.Put("week", strconv.Itoa(week))
+				ctx.Put("year", year)
+				ctx.Put("week", week)
 
 				matchupCollector.Request("GET", fbsURL, nil, ctx, nil)
 			}
@@ -113,77 +116,65 @@ func scrapeMatchups() {
 	// --- Handlers: Matchup Page (Game Center - Full Box Score) ---
 
 	matchupCollector.OnHTML("#teamMatchupFull", func(e *colly.HTMLElement) {
-		matchupID, _ := strconv.Atoi(e.Request.Ctx.Get("matchupId"))
-		currentYear, _ := strconv.Atoi(e.Request.Ctx.Get("year"))
-		currentWeek, _ := strconv.Atoi(e.Request.Ctx.Get("week"))
-		if currentWeek == 0 {
+		year := e.Request.Ctx.GetAny("year").(int)
+		week := e.Request.Ctx.GetAny("week").(int)
+		if week == 0 {
 			if matches := weekRegex.FindStringSubmatch(e.Request.URL.String()); len(matches) > 1 {
-				currentWeek, _ = strconv.Atoi(matches[1])
+				week, _ = strconv.Atoi(matches[1])
 			}
 		}
 
-		extractTeamData := func(wrapClass string) Matchup {
-			// 1. Get Team ID and Points from the header section
-			teamIDStr := ""
+		extractTeamMatchup := func(wrapClass string) TeamMatchup {
+			teamID := ""
 			classAttr := e.ChildAttr(wrapClass+" .teamTotal", "class")
 			if matches := teamIDRegex.FindStringSubmatch(classAttr); len(matches) > 1 {
-				teamIDStr = matches[1]
+				teamID = matches[1]
 			}
-			teamID, _ := strconv.Atoi(teamIDStr)
 
 			pointsStr := e.ChildText(wrapClass + " .teamTotal")
 			points, _ := strconv.ParseFloat(strings.TrimSpace(pointsStr), 32)
 
-			// 2. Extract Players from the Full Box Score section
-			var starters []Player
-			var bench []Player
+			var players []MatchupPlayer
 
 			e.ForEach(wrapClass+" .tableWrap table", func(_ int, table *colly.HTMLElement) {
-				// Build header map for stats
 				statHeaders := buildStatHeaders(table)
 
 				table.ForEach("tbody tr", func(_ int, el *colly.HTMLElement) {
-					p := parsePlayerRow(el, statHeaders)
-					if p.id != "" {
-						// Debug Print for Player Stats
-						statsParts := []string{}
-						for k, v := range p.stats {
-							if v != 0 {
-								statsParts = append(statsParts, fmt.Sprintf("%s:%.1f", k, v))
-							}
-						}
-						fmt.Printf("      [Player] %-3s | %-20s | Pts: %6.2f | Stats: %s\n",
-							p.startingPosition, p.name, p.points, strings.Join(statsParts, " "))
-
-						if p.startingPosition == "BN" || p.startingPosition == "RES" {
-							bench = append(bench, p)
-						} else {
-							starters = append(starters, p)
-						}
+					p := parseMatchupPlayerRow(el, statHeaders)
+					if p.PlayerID != "" {
+						players = append(players, p)
 					}
 				})
 			})
 
-			return Matchup{
-				matchupId: matchupID,
-				year:      currentYear,
-				week:      currentWeek,
-				team:      teamID,
-				points:    float32(points),
-				starters:  starters,
-				bench:     bench,
+			return TeamMatchup{
+				TeamID:      teamID,
+				TotalPoints: float32(points),
+				Players:     players,
 			}
 		}
 
-		m1 := extractTeamData(".teamWrap-1")
-		m2 := extractTeamData(".teamWrap-2")
+		t1 := extractTeamMatchup(".teamWrap-1")
+		t2 := extractTeamMatchup(".teamWrap-2")
+
+		// Ensure team1 always has the lower ID
+		id1, _ := strconv.Atoi(t1.TeamID)
+		id2, _ := strconv.Atoi(t2.TeamID)
+		if id1 > id2 {
+			t1, t2 = t2, t1
+		}
+
+		matchupID := fmt.Sprintf("%d-%d-%s-%s", year, week, t1.TeamID, t2.TeamID)
 
 		mu.Lock()
-		allMatchups = append(allMatchups, m1, m2)
+		allMatchups = append(allMatchups, MatchupHistory{
+			Year:      year,
+			MatchupID: matchupID,
+			Week:      week,
+			Team1:     t1,
+			Team2:     t2,
+		})
 		mu.Unlock()
-
-		fmt.Printf("Scraped Wk %d Matchup %d: Team %d (%.2f) vs Team %d (%.2f)\n",
-			currentWeek, matchupID, m1.team, m1.points, m2.team, m2.points)
 	})
 
 	scheduleCollector.OnError(func(r *colly.Response, err error) {
@@ -193,23 +184,44 @@ func scrapeMatchups() {
 		log.Println("Matchup Collector Error:", err, r.Request.URL)
 	})
 
-	fmt.Println("Starting scraper...")
-	scheduleCollector.Visit(startURL)
+	for year := startYear; year <= endYear; year++ {
+		startURL := fmt.Sprintf("https://fantasy.nfl.com/league/%s/history/%d/schedule", leagueId, year)
+		ctx := colly.NewContext()
+		ctx.Put("year", year)
+		scheduleCollector.Request("GET", startURL, nil, ctx, nil)
+	}
+
 	scheduleCollector.Wait()
 	matchupCollector.Wait()
+
+	// Sort by matchupId
+	sort.Slice(allMatchups, func(i, j int) bool {
+		return allMatchups[i].MatchupID < allMatchups[j].MatchupID
+	})
+
+	// Write to JSON file
+	file, err := os.Create("matchup-history.json")
+	if err != nil {
+		log.Printf("Error creating matchup-history.json: %v\n", err)
+		return
+	}
+	defer file.Close()
+
+	encoder := json.NewEncoder(file)
+	encoder.SetIndent("", "  ")
+	if err := encoder.Encode(allMatchups); err != nil {
+		log.Printf("Error encoding matchup history to JSON: %v\n", err)
+	} else {
+		fmt.Println("Successfully saved matchup history to matchup-history.json")
+	}
 }
 
 func buildStatHeaders(table *colly.HTMLElement) []string {
 	var headers []string
-
-	// Map to store groups by column index
 	groupMap := make(map[int]string)
 
-	// First row of header contains groupings
 	table.DOM.Find("thead tr.first th").Each(func(i int, s *goquery.Selection) {
 		groupName := strings.TrimSpace(s.Find("span").Text())
-
-		// Map specific groups as requested
 		lowGroupName := strings.ToLower(groupName)
 		if strings.Contains(lowGroupName, "pat") {
 			groupName = "pat"
@@ -229,14 +241,12 @@ func buildStatHeaders(table *colly.HTMLElement) []string {
 			colspan = 1
 		}
 
-		// We need to track the actual starting index in the final flat list
 		startIdx := len(groupMap)
 		for j := 0; j < colspan; j++ {
 			groupMap[startIdx+j] = strings.ToLower(groupName)
 		}
 	})
 
-	// Second row of header contains individual stat labels
 	table.DOM.Find("thead tr.last th").Each(func(i int, s *goquery.Selection) {
 		if s.HasClass("stat") {
 			statLabel := strings.ToLower(strings.TrimSpace(s.Find("span").Text()))
@@ -248,7 +258,6 @@ func buildStatHeaders(table *colly.HTMLElement) []string {
 			}
 			headers = append(headers, fullName)
 		} else {
-			// Placeholder for non-stat columns to keep indices aligned
 			headers = append(headers, "")
 		}
 	})
@@ -256,20 +265,94 @@ func buildStatHeaders(table *colly.HTMLElement) []string {
 	return headers
 }
 
-func parsePlayerRow(e *colly.HTMLElement, statHeaders []string) Player {
-	// Parse ID
+func mapMatchupStatToSleeper(nflKey string) string {
+	switch nflKey {
+	// Passing
+	case "passing_yds":
+		return "pass_yd"
+	case "passing_td":
+		return "pass_td"
+	case "passing_int":
+		return "pass_int"
+	case "passing_sck":
+		return "pass_sack"
+
+	// Rushing
+	case "rushing_att":
+		return "rush_att"
+	case "rushing_yds":
+		return "rush_yd"
+	case "rushing_td":
+		return "rush_td"
+
+	// Receiving
+	case "receiving_rec":
+		return "rec"
+	case "receiving_yds":
+		return "rec_yd"
+	case "receiving_td":
+		return "rec_td"
+
+	// Kicking
+	case "pat_made":
+		return "xpm"
+	case "fg_made_0-19":
+		return "fgm_0_19"
+	case "fg_made_20-29":
+		return "fgm_20_29"
+	case "fg_made_30-39":
+		return "fgm_30_39"
+	case "fg_made_40-49":
+		return "fgm_40_49"
+	case "fg_made_50+":
+		return "fgm_50p"
+
+	// Defense
+	case "kick_block":
+		return "blk_kick"
+	case "points_pts allow":
+		return "pts_allow"
+	case "ret_td":
+		return "ret_td"
+	case "score_saf":
+		return "safe"
+	case "score_td":
+		return "def_td"
+	case "tackles_sack":
+		return "sack"
+	case "turnover_fum f":
+		return "ff"
+	case "turnover_fum rec":
+		return "fum_rec"
+	case "turnover_int":
+		return "int"
+	case "yards_yds allow":
+		return "yds_allow"
+
+	// Misc
+	case "fumble_lost":
+		return "fum_lost"
+	case "return_td":
+		return "st_td"
+	case "misc_2pt":
+		return "pass_2pt" // This is ambiguous in NFL but usually stored as 2pt
+	}
+
+	return nflKey
+}
+
+func parseMatchupPlayerRow(e *colly.HTMLElement, statHeaders []string) MatchupPlayer {
 	idStr := ""
 	nameClass := e.ChildAttr(".playerNameAndInfo .playerName", "class")
 	if matches := playerIDRegex.FindStringSubmatch(nameClass); len(matches) > 1 {
 		idStr = matches[1]
 	}
 
-	// Parse Name
 	name := e.ChildText(".playerNameAndInfo .playerName")
 
-	// Parse Position
-	startingPosition := e.ChildText(".teamPosition")
-	startingPosition = mapToSleeperPosition(startingPosition)
+	rawPos := strings.TrimSpace(e.ChildText(".teamPosition"))
+	startingPosition, rosterStatus := mapToSleeperPosition(rawPos)
+
 	teamPositionText := e.ChildText(".playerNameAndInfo em")
 	teamPosition := ""
 	team := ""
@@ -285,12 +368,6 @@ func parsePlayerRow(e *colly.HTMLElement, statHeaders []string) Player {
 		}
 	}
 
-	// Parse Points
-	ptsStr := e.ChildText(".statTotal")
-	ptsStr = strings.ReplaceAll(ptsStr, "-", "0")
-	pts, _ := strconv.ParseFloat(strings.TrimSpace(ptsStr), 32)
-
-	// Parse Stats
 	stats := make(map[string]float32)
 	e.DOM.Find("td").Each(func(i int, s *goquery.Selection) {
 		if i < len(statHeaders) && statHeaders[i] != "" {
@@ -298,17 +375,25 @@ func parsePlayerRow(e *colly.HTMLElement, statHeaders []string) Player {
 			valStr = strings.ReplaceAll(valStr, "-", "0")
 			valStr = strings.ReplaceAll(valStr, ",", "")
 			val, _ := strconv.ParseFloat(valStr, 32)
-			stats[statHeaders[i]] = float32(val)
+
+			sleeperKey := mapMatchupStatToSleeper(statHeaders[i])
+			if sleeperKey != "" {
+				stats[sleeperKey] = float32(val)
+			}
 		}
 	})
 
-	return Player{
-		id:               idStr,
-		name:             name,
-		startingPosition: startingPosition,
-		points:           float32(pts),
-		teamPosition:     teamPosition,
-		team:             team,
-		stats:            stats,
+	points := stats["points"]
+	delete(stats, "points")
+
+	return MatchupPlayer{
+		PlayerID:         idStr,
+		PlayerName:       name,
+		Status:           rosterStatus,
+		StartingPosition: startingPosition,
+		Team:             team,
+		TeamPosition:     teamPosition,
+		Points:           points,
+		Stats:            stats,
 	}
 }
