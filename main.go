@@ -24,4 +24,5 @@ func main() {
 	//scrapePlayoffs() // writes to file
 	//scrapeEndStandings()  // writes to file
 	//scrapeMatchups()
+	//scrapeTrades() // writes to file
 }

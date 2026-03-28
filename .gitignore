@@ -1,5 +1,6 @@
 # Binary output
 untitled
+nfl-scraper
 
 # Go build artifacts
 *.exe
@@ -22,3 +23,6 @@ vendor/
 
 # Contains live session cookie — do not commit
 .env
+
+# created history json files
+*-history.json
