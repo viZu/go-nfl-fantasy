@@ -21,7 +21,9 @@ type PlayoffGame struct {
 	RoundLabel  string  `json:"roundLabel"`
 	BracketType string  `json:"bracketType"`
 	Team1       string  `json:"team1"`
+	Team1Seed   int     `json:"team1Seed"`
 	Team2       string  `json:"team2"`
+	Team2Seed   int     `json:"team2Seed"`
 	Team1Points float32 `json:"team1Points"`
 	Team2Points float32 `json:"team2Points"`
 	Winner      string  `json:"winner"`
@@ -30,6 +32,7 @@ type PlayoffGame struct {
 // Local regex for playoff week labels
 var playoffWeekRegex = regexp.MustCompile(`Week (\d+)`)
 var playoffWeekIndexRegex = regexp.MustCompile(`pw-(\d+)`)
+var playoffSeedRegex = regexp.MustCompile(`\((\d+)\)`)
 
 func scrapePlayoffs() {
 	fmt.Println("Scraping playoffs...")
@@ -73,6 +76,12 @@ func scrapePlayoffs() {
 			t1PointsStr := el.ChildText(".teamWrap-1 .teamTotal")
 			t1Points, _ := strconv.ParseFloat(strings.TrimSpace(t1PointsStr), 32)
 
+			t1SeedStr := el.ChildText(".teamWrap-1 .teamRank")
+			t1Seed := 0
+			if matches := playoffSeedRegex.FindStringSubmatch(t1SeedStr); len(matches) > 1 {
+				t1Seed, _ = strconv.Atoi(matches[1])
+			}
+
 			// Team 2 Extraction
 			team2ID := ""
 			t2Class := el.ChildAttr(".teamWrap-2 .teamName", "class")
@@ -81,6 +90,12 @@ func scrapePlayoffs() {
 			}
 			t2PointsStr := el.ChildText(".teamWrap-2 .teamTotal")
 			t2Points, _ := strconv.ParseFloat(strings.TrimSpace(t2PointsStr), 32)
+
+			t2SeedStr := el.ChildText(".teamWrap-2 .teamRank")
+			t2Seed := 0
+			if matches := playoffSeedRegex.FindStringSubmatch(t2SeedStr); len(matches) > 1 {
+				t2Seed, _ = strconv.Atoi(matches[1])
+			}
 
 			// Determine Winner
 			winnerID := ""
@@ -98,7 +113,9 @@ func scrapePlayoffs() {
 					RoundLabel:  roundLabel,
 					BracketType: bracketType,
 					Team1:       team1ID,
+					Team1Seed:   t1Seed,
 					Team2:       team2ID,
+					Team2Seed:   t2Seed,
 					Team1Points: float32(t1Points),
 					Team2Points: float32(t2Points),
 					Winner:      winnerID,
