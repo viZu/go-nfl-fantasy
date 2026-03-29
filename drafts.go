@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/gocolly/colly"
 )
@@ -25,7 +26,8 @@ type DraftPick struct {
 }
 
 func scrapeDrafts() {
-	fmt.Println("Scraping draft results...")
+	startTime := time.Now()
+	fmt.Println("[DRAFTS] Starting draft results scraper...")
 	c := createColly(&colly.LimitRule{
 		DomainGlob:  "*fantasy.nfl.com*",
 		Parallelism: 2,
@@ -86,6 +88,7 @@ func scrapeDrafts() {
 	})
 
 	for year := startYear; year <= endYear; year++ {
+		fmt.Printf("\tProcessing year %d...\n", year)
 		// Updated URL with query parameters to ensure all rounds are returned
 		targetURL := fmt.Sprintf("https://fantasy.nfl.com/league/%s/history/%d/draftresults?draftResultsDetail=0&draftResultsTab=round&draftResultsType=results", leagueId, year)
 		ctx := colly.NewContext()
@@ -118,8 +121,8 @@ func scrapeDrafts() {
 	encoder := json.NewEncoder(file)
 	encoder.SetIndent("", "  ")
 	if err := encoder.Encode(allPicks); err != nil {
-		log.Printf("Error encoding draft history to JSON: %v\n", err)
+		log.Printf("❌ [DRAFTS] Error encoding draft history to JSON: %v\n", err)
 	} else {
-		fmt.Println("Successfully saved draft history to draft-history.json")
+		fmt.Printf("\t✅ Successfully saved %d picks to draft-history.json (took %s)\n", len(allPicks), time.Since(startTime))
 	}
 }

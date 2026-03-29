@@ -61,7 +61,8 @@ func transformToFBS(originalURL string) (string, error) {
 }
 
 func scrapeMatchups() {
-	fmt.Println("Scraping matchups...")
+	startTime := time.Now()
+	fmt.Println("[MATCHUPS] Starting matchups history scraper...")
 
 	var allMatchups []MatchupHistory
 	var mu sync.Mutex
@@ -100,7 +101,7 @@ func scrapeMatchups() {
 				absURL := e.Request.AbsoluteURL(link)
 				fbsURL, err := transformToFBS(absURL)
 				if err != nil {
-					log.Printf("Error transforming URL: %v", err)
+					log.Printf("❌ [MATCHUPS] Error transforming URL: %v", err)
 					fbsURL = absURL
 				}
 
@@ -178,13 +179,14 @@ func scrapeMatchups() {
 	})
 
 	scheduleCollector.OnError(func(r *colly.Response, err error) {
-		log.Println("Schedule Collector Error:", err, r.Request.URL)
+		log.Printf("❌ [MATCHUPS] Schedule Collector Error: %v (%s)\n", err, r.Request.URL)
 	})
 	matchupCollector.OnError(func(r *colly.Response, err error) {
-		log.Println("Matchup Collector Error:", err, r.Request.URL)
+		log.Printf("❌ [MATCHUPS] Matchup Collector Error: %v (%s)\n", err, r.Request.URL)
 	})
 
 	for year := startYear; year <= endYear; year++ {
+		fmt.Printf("\t[MATCHUPS] Processing year %d...\n", year)
 		startURL := fmt.Sprintf("https://fantasy.nfl.com/league/%s/history/%d/schedule", leagueId, year)
 		ctx := colly.NewContext()
 		ctx.Put("year", year)
@@ -202,7 +204,7 @@ func scrapeMatchups() {
 	// Write to JSON file
 	file, err := os.Create("matchup-history.json")
 	if err != nil {
-		log.Printf("Error creating matchup-history.json: %v\n", err)
+		log.Printf("❌ [MATCHUPS] Error creating matchup-history.json: %v\n", err)
 		return
 	}
 	defer file.Close()
@@ -210,9 +212,9 @@ func scrapeMatchups() {
 	encoder := json.NewEncoder(file)
 	encoder.SetIndent("", "  ")
 	if err := encoder.Encode(allMatchups); err != nil {
-		log.Printf("Error encoding matchup history to JSON: %v\n", err)
+		log.Printf("\t❌ [MATCHUPS] Error encoding matchup history to JSON: %v\n", err)
 	} else {
-		fmt.Println("Successfully saved matchup history to matchup-history.json")
+		fmt.Printf("\t✅ Successfully saved %d matchups to matchup-history.json (took %s)\n", len(allMatchups), time.Since(startTime))
 	}
 }
 
@@ -308,26 +310,16 @@ func mapMatchupStatToSleeper(nflKey string) string {
 		return "fgm_50p"
 
 	// Defense
-	case "kick_block":
-		return "blk_kick"
-	case "points_pts allow":
-		return "pts_allow"
-	case "ret_td":
-		return "ret_td"
-	case "score_saf":
-		return "safe"
-	case "score_td":
-		return "def_td"
-	case "tackles_sack":
+	case "defense_sck":
 		return "sack"
-	case "turnover_fum f":
-		return "ff"
-	case "turnover_fum rec":
-		return "fum_rec"
-	case "turnover_int":
+	case "defense_int":
 		return "int"
-	case "yards_yds allow":
-		return "yds_allow"
+	case "defense_fum":
+		return "fum_rec"
+	case "defense_safe":
+		return "safe"
+	case "defense_td":
+		return "def_td"
 
 	// Misc
 	case "fumble_lost":
@@ -351,14 +343,14 @@ func parseMatchupPlayerRow(e *colly.HTMLElement, statHeaders []string) MatchupPl
 	name := e.ChildText(".playerNameAndInfo .playerName")
 
 	rawPos := strings.TrimSpace(e.ChildText(".teamPosition"))
-	startingPosition, rosterStatus := mapToSleeperPosition(rawPos)
+	startingPosition, status := mapToSleeperPosition(rawPos)
 
 	teamPositionText := e.ChildText(".playerNameAndInfo em")
 	teamPosition := ""
 	team := ""
 	if matches := playerTeamAndPositionRegex.FindStringSubmatch(teamPositionText); len(matches) > 1 {
-		teamPosition = matches[1]
-		team = matches[2]
+		teamPosition = matches[2]
+		team = matches[1]
 	} else {
 		if strings.Contains(teamPositionText, "DEF") {
 			team = mapTeamAbbreviation(name)
@@ -389,7 +381,7 @@ func parseMatchupPlayerRow(e *colly.HTMLElement, statHeaders []string) MatchupPl
 	return MatchupPlayer{
 		PlayerID:         idStr,
 		PlayerName:       name,
-		Status:           rosterStatus,
+		Status:           status,
 		StartingPosition: startingPosition,
 		Team:             team,
 		TeamPosition:     teamPosition,

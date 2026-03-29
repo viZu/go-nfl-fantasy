@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strconv"
 	"sync"
+	"time"
 
 	"github.com/gocolly/colly"
 )
@@ -23,7 +24,8 @@ type EndStanding struct {
 var placeRegex = regexp.MustCompile(`place-(\d+)`)
 
 func scrapeEndStandings() {
-	fmt.Println("Scraping end standings...")
+	startTime := time.Now()
+	fmt.Println("[END STANDINGS] Starting end standings scraper...")
 	c := createColly(&colly.LimitRule{
 		DomainGlob:  "*fantasy.nfl.com*",
 		Parallelism: 2,
@@ -65,13 +67,14 @@ func scrapeEndStandings() {
 	})
 
 	for year := startYear; year <= endYear; year++ {
+		fmt.Printf("\tProcessing year %d...\n", year)
 		targetURL := fmt.Sprintf("https://fantasy.nfl.com/league/%s/history/%d/standings", leagueId, year)
 		ctx := colly.NewContext()
 		ctx.Put("year", year)
 
 		err := c.Request("GET", targetURL, nil, ctx, nil)
 		if err != nil {
-			log.Printf("Error requesting end standings for %d: %v", year, err)
+			log.Printf("❌ [END STANDINGS] Error requesting end standings for %d: %v", year, err)
 		}
 	}
 
@@ -88,7 +91,7 @@ func scrapeEndStandings() {
 	// Write to JSON file
 	file, err := os.Create("end-standings-history.json")
 	if err != nil {
-		log.Printf("Error creating end-standings-history.json: %v\n", err)
+		log.Printf("❌ [END STANDINGS] Error creating end-standings-history.json: %v\n", err)
 		return
 	}
 	defer file.Close()
@@ -96,8 +99,8 @@ func scrapeEndStandings() {
 	encoder := json.NewEncoder(file)
 	encoder.SetIndent("", "  ")
 	if err := encoder.Encode(allStandings); err != nil {
-		log.Printf("Error encoding end standings to JSON: %v\n", err)
+		log.Printf("❌ [END STANDINGS] Error encoding end standings to JSON: %v\n", err)
 	} else {
-		fmt.Println("Successfully saved end standings to end-standings-history.json")
+		fmt.Printf("\t✅ Successfully saved %d records to end-standings-history.json (took %s)\n", len(allStandings), time.Since(startTime))
 	}
 }

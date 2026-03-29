@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strconv"
 	"sync"
+	"time"
 
 	"github.com/gocolly/colly"
 )
@@ -32,7 +33,8 @@ type TeamKey struct {
 }
 
 func scrapeManagers() {
-	fmt.Println("Scraping managers...")
+	startTime := time.Now()
+	fmt.Println("[MANAGERS] Starting managers history scraper...")
 	c := createColly(nil)
 
 	// Compile regex for extracting numeric IDs from class strings (e.g., "userId-12345")
@@ -121,6 +123,7 @@ func scrapeManagers() {
 
 	// Loop through the years and visit URLs
 	for year := startYear; year <= endYear; year++ {
+		fmt.Printf("\tProcessing year %d...\n", year)
 		targetURL := fmt.Sprintf("https://fantasy.nfl.com/league/%s/history/%d/owners", leagueId, year)
 
 		// Pass the year variable to the context so we can use it in the OnHTML callback
@@ -129,7 +132,7 @@ func scrapeManagers() {
 
 		err := c.Request("GET", targetURL, nil, ctx, nil)
 		if err != nil {
-			log.Println("Error visiting page:", err)
+			log.Printf("❌ [MANAGERS] Error visiting page for year %d: %v\n", year, err)
 		}
 	}
 
@@ -148,7 +151,7 @@ func scrapeManagers() {
 	// Write to JSON file
 	file, err := os.Create("managers-history.json")
 	if err != nil {
-		log.Printf("Error creating managers-history.json: %v\n", err)
+		log.Printf("❌ [MANAGERS] Error creating managers-history.json: %v\n", err)
 		return
 	}
 	defer file.Close()
@@ -156,9 +159,9 @@ func scrapeManagers() {
 	encoder := json.NewEncoder(file)
 	encoder.SetIndent("", "  ")
 	if err := encoder.Encode(allManagers); err != nil {
-		log.Printf("Error encoding manager history to JSON: %v\n", err)
+		log.Printf("❌ [MANAGERS] Error encoding manager history to JSON: %v\n", err)
 	} else {
-		fmt.Println("Successfully saved manager history to managers-history.json")
+		fmt.Printf("\t✅ Successfully saved %d managers to managers-history.json (took %s)\n", len(allManagers), time.Since(startTime))
 	}
 }
 

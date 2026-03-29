@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/gocolly/colly"
 )
@@ -33,7 +34,8 @@ type RosterPlayer struct {
 }
 
 func scrapeRosters() {
-	fmt.Println("Scraping rosters...")
+	startTime := time.Now()
+	fmt.Println("[ROSTERS] Starting end-of-season rosters scraper...")
 
 	c := createColly(&colly.LimitRule{
 		DomainGlob:  "*fantasy.nfl.com*",
@@ -94,13 +96,14 @@ func scrapeRosters() {
 
 	// Start the process
 	for year := startYear; year <= endYear; year++ {
+		fmt.Printf("\tProcessing year %d...\n", year)
 		targetURL := fmt.Sprintf("https://fantasy.nfl.com/league/%s/history/%d/owners", leagueId, year)
 		ctx := colly.NewContext()
 		ctx.Put("year", year)
 
 		err := c.Request("GET", targetURL, nil, ctx, nil)
 		if err != nil {
-			log.Printf("Error visiting owners page for year %d: %v\n", year, err)
+			log.Printf("❌ [ROSTERS] Error visiting owners page for year %d: %v\n", year, err)
 		}
 	}
 
@@ -120,7 +123,7 @@ func scrapeRosters() {
 	// 4. Write to JSON file
 	file, err := os.Create("end-roster-history.json")
 	if err != nil {
-		log.Printf("Error creating end-roster-history.json: %v\n", err)
+		log.Printf("❌ [ROSTERS] Error creating end-roster-history.json: %v\n", err)
 		return
 	}
 	defer file.Close()
@@ -128,9 +131,9 @@ func scrapeRosters() {
 	encoder := json.NewEncoder(file)
 	encoder.SetIndent("", "  ")
 	if err := encoder.Encode(allRosters); err != nil {
-		log.Printf("Error encoding rosters to JSON: %v\n", err)
+		log.Printf("❌ [ROSTERS] Error encoding rosters to JSON: %v\n", err)
 	} else {
-		fmt.Println("Successfully saved rosters to end-roster-history.json")
+		fmt.Printf("\t✅ Successfully saved %d rosters to end-roster-history.json (took %s)\n", len(allRosters), time.Since(startTime))
 	}
 }
 
@@ -147,7 +150,7 @@ func parseRosterPlayerRow(e *colly.HTMLElement) RosterPlayer {
 
 	// 3. Roster Position (Starting position on the team)
 	rosterPos := e.ChildText(".teamPosition")
-	rosterPosMapped, rosterStatus := mapToSleeperPosition(rosterPos)
+	rosterPosMapped, starterType := mapToSleeperPosition(rosterPos)
 
 	// 4. Team and Position Info
 	teamPosText := e.ChildText(".playerNameAndInfo em")
@@ -179,7 +182,7 @@ func parseRosterPlayerRow(e *colly.HTMLElement) RosterPlayer {
 	pts, _ := strconv.ParseFloat(strings.TrimSpace(ptsStr), 32)
 
 	return RosterPlayer{
-		StarterType:    rosterStatus,
+		StarterType:    starterType,
 		PlayerName:     name,
 		PlayerID:       idStr,
 		RosterPosition: rosterPosMapped,

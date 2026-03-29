@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/gocolly/colly"
 )
@@ -35,7 +36,8 @@ var playoffWeekIndexRegex = regexp.MustCompile(`pw-(\d+)`)
 var playoffSeedRegex = regexp.MustCompile(`\((\d+)\)`)
 
 func scrapePlayoffs() {
-	fmt.Println("Scraping playoffs...")
+	startTime := time.Now()
+	fmt.Println("[PLAYOFFS] Starting playoffs history scraper...")
 
 	c := createColly(&colly.LimitRule{
 		DomainGlob:  "*fantasy.nfl.com*",
@@ -129,6 +131,7 @@ func scrapePlayoffs() {
 	})
 
 	for year := startYear; year <= endYear; year++ {
+		fmt.Printf("\tProcessing year %d...\n", year)
 		// Championship Bracket
 		champURL := fmt.Sprintf("https://fantasy.nfl.com/league/%s/history/%d/playoffs?bracketType=championship&standingsTab=playoffs", leagueId, year)
 		ctxChamp := colly.NewContext()
@@ -137,7 +140,7 @@ func scrapePlayoffs() {
 
 		err := c.Request("GET", champURL, nil, ctxChamp, nil)
 		if err != nil {
-			log.Printf("Error requesting Championship playoffs for %d: %v", year, err)
+			log.Printf("❌ [PLAYOFFS] Error requesting Championship playoffs for %d: %v", year, err)
 		}
 
 		// Consolation Bracket
@@ -148,7 +151,7 @@ func scrapePlayoffs() {
 
 		err = c.Request("GET", consURL, nil, ctxCons, nil)
 		if err != nil {
-			log.Printf("Error requesting Consolation playoffs for %d: %v", year, err)
+			log.Printf("❌ [PLAYOFFS] Error requesting Consolation playoffs for %d: %v", year, err)
 		}
 	}
 
@@ -168,7 +171,7 @@ func scrapePlayoffs() {
 	// Write to JSON file
 	file, err := os.Create("playoff-history.json")
 	if err != nil {
-		log.Printf("Error creating playoff-history.json: %v\n", err)
+		log.Printf("❌ [PLAYOFFS] Error creating playoff-history.json: %v\n", err)
 		return
 	}
 	defer file.Close()
@@ -176,8 +179,22 @@ func scrapePlayoffs() {
 	encoder := json.NewEncoder(file)
 	encoder.SetIndent("", "  ")
 	if err := encoder.Encode(allGames); err != nil {
-		log.Printf("Error encoding playoff history to JSON: %v\n", err)
+		log.Printf("❌ [PLAYOFFS] Error encoding playoff history to JSON: %v\n", err)
 	} else {
-		fmt.Println("Successfully saved playoff history to playoff-history.json")
+		fmt.Printf("\t✅ Successfully saved %d games to playoff-history.json (took %s)\n", len(allGames), time.Since(startTime))
 	}
+}
+
+func getPlayoffRoundNumber(label string) int {
+	l := strings.ToLower(label)
+	if strings.Contains(l, "quarterfinal") {
+		return 1
+	}
+	if strings.Contains(l, "semifinal") {
+		return 2
+	}
+	if strings.Contains(l, "final") || strings.Contains(l, "bowl") || strings.Contains(l, "place") || strings.Contains(l, "championship") {
+		return 3
+	}
+	return 0
 }

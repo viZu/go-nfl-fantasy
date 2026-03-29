@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/gocolly/colly"
 )
@@ -38,7 +39,9 @@ var rankRegex = regexp.MustCompile(`(\d+)\s*\((\d+)\)`)
 var divisionRegex = regexp.MustCompile(`Division\s+(\d+):\s*(.*)`)
 
 func scrapeStandings() {
-	fmt.Println("Scraping regular season standings...")
+	startTime := time.Now()
+	fmt.Println("[STANDINGS] Starting regular season standings scraper...")
+
 	c := createColly(&colly.LimitRule{
 		DomainGlob:  "*fantasy.nfl.com*",
 		Parallelism: 2,
@@ -147,13 +150,14 @@ func scrapeStandings() {
 	})
 
 	for year := startYear; year <= endYear; year++ {
+		fmt.Printf("\tProcessing year %d...\n", year)
 		targetURL := fmt.Sprintf("https://fantasy.nfl.com/league/%s/history/%d/standings?historyStandingsType=regular", leagueId, year)
 		ctx := colly.NewContext()
 		ctx.Put("year", year)
 
 		err := c.Request("GET", targetURL, nil, ctx, nil)
 		if err != nil {
-			log.Println("Error visiting standings page:", err)
+			log.Printf("❌ [STANDINGS] Error visiting standings page for %d: %v\n", year, err)
 		}
 	}
 
@@ -170,7 +174,7 @@ func scrapeStandings() {
 	// Write to JSON file
 	file, err := os.Create("regular-season-standings-history.json")
 	if err != nil {
-		log.Printf("Error creating regular-season-standings-history.json: %v\n", err)
+		log.Printf("❌ [STANDINGS] Error creating regular-season-standings-history.json: %v\n", err)
 		return
 	}
 	defer file.Close()
@@ -178,8 +182,8 @@ func scrapeStandings() {
 	encoder := json.NewEncoder(file)
 	encoder.SetIndent("", "  ")
 	if err := encoder.Encode(allDivisions); err != nil {
-		log.Printf("Error encoding regular season standings to JSON: %v\n", err)
+		log.Printf("❌ [STANDINGS] Error encoding regular season standings to JSON: %v\n", err)
 	} else {
-		fmt.Println("Successfully saved regular season standings to regular-season-standings-history.json")
+		fmt.Printf("\t✅ Successfully saved %d division records to regular-season-standings-history.json (took %s)\n", len(allDivisions), time.Since(startTime))
 	}
 }

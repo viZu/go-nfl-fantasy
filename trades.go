@@ -29,8 +29,8 @@ type TradeTransaction struct {
 }
 
 type Exchange struct {
-	From  string      `json:"fromTeamId"`
-	To    string      `json:"toTeamId"`
+	From  string      `json:"from"`
+	To    string      `json:"to"`
 	Sends []TradeItem `json:"sends"`
 }
 
@@ -52,7 +52,8 @@ var (
 )
 
 func scrapeTrades() {
-	fmt.Println("Scraping trades...")
+	startTime := time.Now()
+	fmt.Println("[TRADES] Starting trades history scraper...")
 
 	c := createColly(&colly.LimitRule{
 		DomainGlob:  "*fantasy.nfl.com*",
@@ -144,13 +145,14 @@ func scrapeTrades() {
 	})
 
 	for year := startYear; year <= endYear; year++ {
+		fmt.Printf("\tProcessing year %d...\n", year)
 		targetURL := fmt.Sprintf("https://fantasy.nfl.com/league/%s/history/%d/transactions?transactionType=trade", leagueId, year)
 		ctx := colly.NewContext()
 		ctx.Put("year", year)
 
 		err := c.Request("GET", targetURL, nil, ctx, nil)
 		if err != nil {
-			log.Printf("Error requesting trades for %d: %v", year, err)
+			log.Printf("❌ [TRADES] Error requesting trades for %d: %v", year, err)
 		}
 	}
 
@@ -173,7 +175,7 @@ func scrapeTrades() {
 	// Write to JSON file
 	file, err := os.Create("trade-history.json")
 	if err != nil {
-		log.Printf("Error creating trade-history.json: %v\n", err)
+		log.Printf("❌ [TRADES] Error creating trade-history.json: %v\n", err)
 		return
 	}
 	defer file.Close()
@@ -181,9 +183,9 @@ func scrapeTrades() {
 	encoder := json.NewEncoder(file)
 	encoder.SetIndent("", "  ")
 	if err := encoder.Encode(allTrades); err != nil {
-		log.Printf("Error encoding trades to JSON: %v\n", err)
+		log.Printf("❌ [TRADES] Error encoding trades to JSON: %v\n", err)
 	} else {
-		fmt.Println("Successfully saved trade history to trade-history.json")
+		fmt.Printf("\t✅ Successfully saved %d trades to trade-history.json (took %s)\n", len(allTrades), time.Since(startTime))
 	}
 }
 
@@ -205,7 +207,7 @@ func parseTradeDate(dateStr string, year int) time.Time {
 
 	t, err := time.Parse(layout, fullStr)
 	if err != nil {
-		log.Printf("Error parsing date '%s': %v", fullStr, err)
+		log.Printf("❌ [TRADES] Error parsing date '%s': %v", fullStr, err)
 		return time.Time{}
 	}
 	return t

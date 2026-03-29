@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/gocolly/colly"
@@ -24,7 +25,8 @@ type SeasonSettings struct {
 }
 
 func scrapeSettings() {
-	fmt.Println("Scraping league settings...")
+	startTime := time.Now()
+	fmt.Println("[SETTINGS] Starting league settings scraper...")
 
 	c := createColly(&colly.LimitRule{
 		DomainGlob:  "*fantasy.nfl.com*",
@@ -52,7 +54,7 @@ func scrapeSettings() {
 			valStr := strings.TrimSpace(el.ChildText(".value"))
 			val, _ := strconv.Atoi(valStr)
 
-			sleeperPos := mapSleeperPosition(pos)
+			sleeperPos := mapSleeperPositionName(pos)
 			if sleeperPos != "UNKNOWN" {
 				settings.RosterPositions[sleeperPos] += val
 			}
@@ -108,13 +110,14 @@ func scrapeSettings() {
 	})
 
 	for year := startYear; year <= endYear; year++ {
+		fmt.Printf("\tProcessing year %d...\n", year)
 		targetURL := fmt.Sprintf("https://fantasy.nfl.com/league/%s/history/%d/settings", leagueId, year)
 		ctx := colly.NewContext()
 		ctx.Put("year", year)
 
 		err := c.Request("GET", targetURL, nil, ctx, nil)
 		if err != nil {
-			log.Printf("Error requesting settings for %d: %v", year, err)
+			log.Printf("❌ [SETTINGS] Error requesting settings for %d: %v", year, err)
 		}
 	}
 
@@ -128,7 +131,7 @@ func scrapeSettings() {
 	// Write to JSON file
 	file, err := os.Create("settings-history.json")
 	if err != nil {
-		log.Printf("Error creating settings-history.json: %v\n", err)
+		log.Printf("❌ [SETTINGS] Error creating settings-history.json: %v\n", err)
 		return
 	}
 	defer file.Close()
@@ -136,13 +139,13 @@ func scrapeSettings() {
 	encoder := json.NewEncoder(file)
 	encoder.SetIndent("", "  ")
 	if err := encoder.Encode(allSettings); err != nil {
-		log.Printf("Error encoding settings to JSON: %v\n", err)
+		log.Printf("❌ [SETTINGS] Error encoding settings to JSON: %v\n", err)
 	} else {
-		fmt.Println("Successfully saved settings to settings-history.json")
+		fmt.Printf("\t✅ Successfully saved %d records to settings-history.json (took %s)\n", len(allSettings), time.Since(startTime))
 	}
 }
 
-func mapSleeperPosition(nflPos string) string {
+func mapSleeperPositionName(nflPos string) string {
 	nflPos = strings.ToLower(nflPos)
 	switch {
 	case strings.Contains(nflPos, "quarterback"):
