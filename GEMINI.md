@@ -24,7 +24,7 @@ The project is structured into functional modules to separate scraping concerns:
 
 ### Prerequisites
 - Go 1.25 or higher.
-- A valid `nflCookie` in `globals.go` (retrieved from a logged-in browser session).
+- A valid `NFL_COOKIE` in `.env` (retrieved from a logged-in browser session).
 
 ### Commands
 - **Run the scraper**:

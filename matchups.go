@@ -186,7 +186,7 @@ func scrapeMatchups() {
 	})
 
 	for year := startYear; year <= endYear; year++ {
-		fmt.Printf("\t[MATCHUPS] Processing year %d...\n", year)
+		fmt.Printf("\tProcessing year %d...\n", year)
 		startURL := fmt.Sprintf("https://fantasy.nfl.com/league/%s/history/%d/schedule", leagueId, year)
 		ctx := colly.NewContext()
 		ctx.Put("year", year)

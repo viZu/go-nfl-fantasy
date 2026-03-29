@@ -27,11 +27,6 @@ type Manager struct {
 	TeamImageURL    string  `json:"teamImgUrl"`
 }
 
-type TeamKey struct {
-	Year   int
-	TeamID string
-}
-
 func scrapeManagers() {
 	startTime := time.Now()
 	fmt.Println("[MANAGERS] Starting managers history scraper...")
@@ -163,15 +158,4 @@ func scrapeManagers() {
 	} else {
 		fmt.Printf("\t✅ Successfully saved %d managers to managers-history.json (took %s)\n", len(allManagers), time.Since(startTime))
 	}
-}
-
-// Function to convert slice to lookup map - kept for reference or other usage if needed, but not returned by scrapeManagers anymore
-func createLookupTable(managers []Manager) map[TeamKey]Manager {
-	lookup := make(map[TeamKey]Manager)
-
-	for _, mgr := range managers {
-		lookup[TeamKey{Year: mgr.Year, TeamID: mgr.TeamID}] = mgr
-	}
-
-	return lookup
 }

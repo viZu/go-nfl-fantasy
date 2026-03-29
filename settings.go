@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -15,14 +16,21 @@ import (
 	"github.com/gocolly/colly"
 )
 
-type SeasonSettings struct {
-	Year            int                `json:"year"`
-	RosterPositions map[string]int     `json:"rosterPositions"`
-	OffenseSettings map[string]float64 `json:"offenseSettings"`
-	KickingSettings map[string]float64 `json:"kickingSettings"`
-	DSTSettings     map[string]float64 `json:"dstSettings"`
-	OtherSettings   map[string]string  `json:"otherSettings"`
+type RosterPosition struct {
+	Count int  `json:"count"`
+	Max   *int `json:"max,omitempty"`
 }
+
+type SeasonSettings struct {
+	Year            int                       `json:"year"`
+	RosterPositions map[string]RosterPosition `json:"rosterPositions"`
+	OffenseSettings map[string]float64        `json:"offenseSettings"`
+	KickingSettings map[string]float64        `json:"kickingSettings"`
+	DSTSettings     map[string]float64        `json:"dstSettings"`
+	OtherSettings   map[string]string         `json:"otherSettings"`
+}
+
+var rosterValueRegex = regexp.MustCompile(`(\d+)(?:.+\(Max\s+(\d+)\))?`)
 
 func scrapeSettings() {
 	startTime := time.Now()
@@ -41,7 +49,7 @@ func scrapeSettings() {
 
 		settings := SeasonSettings{
 			Year:            year,
-			RosterPositions: make(map[string]int),
+			RosterPositions: make(map[string]RosterPosition),
 			OffenseSettings: make(map[string]float64),
 			KickingSettings: make(map[string]float64),
 			DSTSettings:     make(map[string]float64),
@@ -52,11 +60,28 @@ func scrapeSettings() {
 		e.ForEach(".positionsAndRoster li", func(_ int, el *colly.HTMLElement) {
 			pos := strings.TrimSuffix(strings.TrimSpace(el.ChildText("em")), ":")
 			valStr := strings.TrimSpace(el.ChildText(".value"))
-			val, _ := strconv.Atoi(valStr)
 
-			sleeperPos := mapSleeperPositionName(pos)
-			if sleeperPos != "UNKNOWN" {
-				settings.RosterPositions[sleeperPos] += val
+			matches := rosterValueRegex.FindStringSubmatch(valStr)
+			if len(matches) > 1 {
+				count, _ := strconv.Atoi(matches[1])
+				var max *int
+				if len(matches) > 2 && matches[2] != "" {
+					m, _ := strconv.Atoi(matches[2])
+					max = &m
+				}
+
+				sleeperPos := mapSleeperPositionName(pos)
+				if sleeperPos != "UNKNOWN" {
+					curr := settings.RosterPositions[sleeperPos]
+					curr.Count += count
+					if max != nil {
+						if curr.Max == nil {
+							curr.Max = new(int)
+						}
+						*curr.Max += *max
+					}
+					settings.RosterPositions[sleeperPos] = curr
+				}
 			}
 		})
 

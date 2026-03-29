@@ -184,17 +184,3 @@ func scrapePlayoffs() {
 		fmt.Printf("\t✅ Successfully saved %d games to playoff-history.json (took %s)\n", len(allGames), time.Since(startTime))
 	}
 }
-
-func getPlayoffRoundNumber(label string) int {
-	l := strings.ToLower(label)
-	if strings.Contains(l, "quarterfinal") {
-		return 1
-	}
-	if strings.Contains(l, "semifinal") {
-		return 2
-	}
-	if strings.Contains(l, "final") || strings.Contains(l, "bowl") || strings.Contains(l, "place") || strings.Contains(l, "championship") {
-		return 3
-	}
-	return 0
-}
