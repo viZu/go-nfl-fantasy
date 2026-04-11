@@ -1,8 +1,9 @@
-package main
+package scraper
 
 import (
 	"encoding/json"
 	"fmt"
+	"gonflfantasy/internal/config"
 	"log"
 	"os"
 	"regexp"
@@ -38,11 +39,11 @@ var recordRegex = regexp.MustCompile(`(\d+)-(\d+)-(\d+)`)
 var rankRegex = regexp.MustCompile(`(\d+)\s*\((\d+)\)`)
 var divisionRegex = regexp.MustCompile(`Division\s+(\d+):\s*(.*)`)
 
-func scrapeStandings() {
+func ScrapeStandings(cfg *config.Config) {
 	startTime := time.Now()
 	fmt.Println("[STANDINGS] Starting regular season standings scraper...")
 
-	c := createColly(&colly.LimitRule{
+	c := CreateColly(cfg, &colly.LimitRule{
 		DomainGlob:  "*fantasy.nfl.com*",
 		Parallelism: 2,
 	})
@@ -149,9 +150,9 @@ func scrapeStandings() {
 		})
 	})
 
-	for year := startYear; year <= endYear; year++ {
+	for year := cfg.StartYear; year <= cfg.EndYear; year++ {
 		fmt.Printf("\tProcessing year %d...\n", year)
-		targetURL := fmt.Sprintf("https://fantasy.nfl.com/league/%s/history/%d/standings?historyStandingsType=regular", leagueId, year)
+		targetURL := fmt.Sprintf("https://fantasy.nfl.com/league/%s/history/%d/standings?historyStandingsType=regular", cfg.LeagueID, year)
 		ctx := colly.NewContext()
 		ctx.Put("year", year)
 

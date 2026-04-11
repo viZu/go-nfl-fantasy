@@ -1,8 +1,10 @@
-package main
+package scraper
 
 import (
 	"encoding/json"
 	"fmt"
+	"gonflfantasy/internal/config"
+	"gonflfantasy/pkg/utils"
 	"log"
 	"net/url"
 	"os"
@@ -60,21 +62,21 @@ func transformToFBS(originalURL string) (string, error) {
 	return u.String(), nil
 }
 
-func scrapeMatchups() {
+func ScrapeMatchups(cfg *config.Config) {
 	startTime := time.Now()
 	fmt.Println("[MATCHUPS] Starting matchups history scraper...")
 
 	var allMatchups []MatchupHistory
 	var mu sync.Mutex
 
-	scheduleCollector := createColly(&colly.LimitRule{
+	scheduleCollector := CreateColly(cfg, &colly.LimitRule{
 		DomainGlob:  "*fantasy.nfl.com*",
 		Parallelism: 2,
 		Delay:       200 * time.Millisecond,
 		RandomDelay: 500 * time.Millisecond,
 	})
 
-	matchupCollector := createColly(&colly.LimitRule{
+	matchupCollector := CreateColly(cfg, &colly.LimitRule{
 		DomainGlob:  "*fantasy.nfl.com*",
 		Parallelism: 4,
 		Delay:       100 * time.Millisecond,
@@ -185,9 +187,9 @@ func scrapeMatchups() {
 		log.Printf("❌ [MATCHUPS] Matchup Collector Error: %v (%s)\n", err, r.Request.URL)
 	})
 
-	for year := startYear; year <= endYear; year++ {
+	for year := cfg.StartYear; year <= cfg.EndYear; year++ {
 		fmt.Printf("\tProcessing year %d...\n", year)
-		startURL := fmt.Sprintf("https://fantasy.nfl.com/league/%s/history/%d/schedule", leagueId, year)
+		startURL := fmt.Sprintf("https://fantasy.nfl.com/league/%s/history/%d/schedule", cfg.LeagueID, year)
 		ctx := colly.NewContext()
 		ctx.Put("year", year)
 		scheduleCollector.Request("GET", startURL, nil, ctx, nil)
@@ -343,7 +345,7 @@ func parseMatchupPlayerRow(e *colly.HTMLElement, statHeaders []string) MatchupPl
 	name := e.ChildText(".playerNameAndInfo .playerName")
 
 	rawPos := strings.TrimSpace(e.ChildText(".teamPosition"))
-	startingPosition, status := mapToSleeperPosition(rawPos)
+	startingPosition, status := utils.MapToSleeperPosition(rawPos)
 
 	teamPositionText := e.ChildText(".playerNameAndInfo em")
 	teamPosition := ""
@@ -353,7 +355,7 @@ func parseMatchupPlayerRow(e *colly.HTMLElement, statHeaders []string) MatchupPl
 		team = matches[1]
 	} else {
 		if strings.Contains(teamPositionText, "DEF") {
-			team = mapTeamAbbreviation(name)
+			team = utils.MapTeamAbbreviation(name)
 			teamPosition = "DEF"
 		} else {
 			teamPosition = teamPositionText

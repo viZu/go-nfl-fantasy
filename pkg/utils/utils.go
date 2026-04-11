@@ -1,10 +1,10 @@
-package main
+package utils
 
 import (
 	"strings"
 )
 
-func mapToSleeperPosition(pos string) (string, string) {
+func MapToSleeperPosition(pos string) (string, string) {
 	pos = strings.TrimSpace(pos)
 	if pos == "QB" || pos == "RB" || pos == "WR" || pos == "TE" || pos == "DEF" || pos == "K" {
 		return pos, "ST"
@@ -24,7 +24,7 @@ func mapToSleeperPosition(pos string) (string, string) {
 	return pos, pos
 }
 
-func mapTeamAbbreviation(teamName string) string {
+func MapTeamAbbreviation(teamName string) string {
 	switch teamName {
 	case "Seattle Seahawks":
 		return "SEA"

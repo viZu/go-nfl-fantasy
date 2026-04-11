@@ -1,8 +1,9 @@
-package main
+package scraper
 
 import (
 	"encoding/json"
 	"fmt"
+	"gonflfantasy/internal/config"
 	"log"
 	"os"
 	"regexp"
@@ -25,10 +26,10 @@ type DraftPick struct {
 	PlayerName string `json:"playerName"`
 }
 
-func scrapeDrafts() {
+func ScrapeDrafts(cfg *config.Config) {
 	startTime := time.Now()
 	fmt.Println("[DRAFTS] Starting draft results scraper...")
-	c := createColly(&colly.LimitRule{
+	c := CreateColly(cfg, &colly.LimitRule{
 		DomainGlob:  "*fantasy.nfl.com*",
 		Parallelism: 2,
 	})
@@ -87,10 +88,10 @@ func scrapeDrafts() {
 		})
 	})
 
-	for year := startYear; year <= endYear; year++ {
+	for year := cfg.StartYear; year <= cfg.EndYear; year++ {
 		fmt.Printf("\tProcessing year %d...\n", year)
 		// Updated URL with query parameters to ensure all rounds are returned
-		targetURL := fmt.Sprintf("https://fantasy.nfl.com/league/%s/history/%d/draftresults?draftResultsDetail=0&draftResultsTab=round&draftResultsType=results", leagueId, year)
+		targetURL := fmt.Sprintf("https://fantasy.nfl.com/league/%s/history/%d/draftresults?draftResultsDetail=0&draftResultsTab=round&draftResultsType=results", cfg.LeagueID, year)
 		ctx := colly.NewContext()
 		ctx.Put("year", year)
 

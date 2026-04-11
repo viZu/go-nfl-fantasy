@@ -1,8 +1,10 @@
-package main
+package scraper
 
 import (
 	"encoding/json"
 	"fmt"
+	"gonflfantasy/internal/config"
+	"gonflfantasy/pkg/utils"
 	"log"
 	"os"
 	"regexp"
@@ -33,16 +35,16 @@ type RosterPlayer struct {
 	Points         float32 `json:"points"`
 }
 
-func scrapeRosters() {
+func ScrapeRosters(cfg *config.Config) {
 	startTime := time.Now()
 	fmt.Println("[ROSTERS] Starting end-of-season rosters scraper...")
 
-	c := createColly(&colly.LimitRule{
+	c := CreateColly(cfg, &colly.LimitRule{
 		DomainGlob:  "*fantasy.nfl.com*",
 		Parallelism: 2,
 	})
 
-	rosterCollector := createColly(&colly.LimitRule{
+	rosterCollector := CreateColly(cfg, &colly.LimitRule{
 		DomainGlob:  "*fantasy.nfl.com*",
 		Parallelism: 4,
 	})
@@ -95,9 +97,9 @@ func scrapeRosters() {
 	})
 
 	// Start the process
-	for year := startYear; year <= endYear; year++ {
+	for year := cfg.StartYear; year <= cfg.EndYear; year++ {
 		fmt.Printf("\tProcessing year %d...\n", year)
-		targetURL := fmt.Sprintf("https://fantasy.nfl.com/league/%s/history/%d/owners", leagueId, year)
+		targetURL := fmt.Sprintf("https://fantasy.nfl.com/league/%s/history/%d/owners", cfg.LeagueID, year)
 		ctx := colly.NewContext()
 		ctx.Put("year", year)
 
@@ -150,7 +152,7 @@ func parseRosterPlayerRow(e *colly.HTMLElement) RosterPlayer {
 
 	// 3. Roster Position (Starting position on the team)
 	rosterPos := e.ChildText(".teamPosition")
-	rosterPosMapped, starterType := mapToSleeperPosition(rosterPos)
+	rosterPosMapped, starterType := utils.MapToSleeperPosition(rosterPos)
 
 	// 4. Team and Position Info
 	teamPosText := e.ChildText(".playerNameAndInfo em")
@@ -161,7 +163,7 @@ func parseRosterPlayerRow(e *colly.HTMLElement) RosterPlayer {
 		part2 := matches[2]
 
 		if part2 == "DEF" {
-			team = mapTeamAbbreviation(part1)
+			team = utils.MapTeamAbbreviation(part1)
 			teamPos = "DEF"
 		} else {
 			team = part1
@@ -169,7 +171,7 @@ func parseRosterPlayerRow(e *colly.HTMLElement) RosterPlayer {
 		}
 	} else {
 		if strings.Contains(teamPosText, "DEF") {
-			team = mapTeamAbbreviation(name)
+			team = utils.MapTeamAbbreviation(name)
 			teamPos = "DEF"
 		} else {
 			teamPos = teamPosText

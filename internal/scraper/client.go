@@ -1,12 +1,14 @@
-package main
+package scraper
 
 import (
 	"time"
 
+	"gonflfantasy/internal/config"
+
 	"github.com/gocolly/colly"
 )
 
-func createColly(limitRule *colly.LimitRule) *colly.Collector {
+func CreateColly(cfg *config.Config, limitRule *colly.LimitRule) *colly.Collector {
 	c := colly.NewCollector(
 		colly.UserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"),
 		colly.AllowedDomains("fantasy.nfl.com"),
@@ -15,8 +17,7 @@ func createColly(limitRule *colly.LimitRule) *colly.Collector {
 
 	// This injects your browser session into Colly
 	c.OnRequest(func(r *colly.Request) {
-		r.Headers.Set("Cookie", nflCookie)
-		//fmt.Println("Visiting:", r.URL.String())
+		r.Headers.Set("Cookie", cfg.NFLCookie)
 	})
 
 	if limitRule != nil {

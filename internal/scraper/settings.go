@@ -1,8 +1,9 @@
-package main
+package scraper
 
 import (
 	"encoding/json"
 	"fmt"
+	"gonflfantasy/internal/config"
 	"log"
 	"os"
 	"regexp"
@@ -32,11 +33,11 @@ type SeasonSettings struct {
 
 var rosterValueRegex = regexp.MustCompile(`(\d+)(?:.+\(Max\s+(\d+)\))?`)
 
-func scrapeSettings() {
+func ScrapeSettings(cfg *config.Config) {
 	startTime := time.Now()
 	fmt.Println("[SETTINGS] Starting league settings scraper...")
 
-	c := createColly(&colly.LimitRule{
+	c := CreateColly(cfg, &colly.LimitRule{
 		DomainGlob:  "*fantasy.nfl.com*",
 		Parallelism: 2,
 	})
@@ -134,9 +135,9 @@ func scrapeSettings() {
 		mu.Unlock()
 	})
 
-	for year := startYear; year <= endYear; year++ {
+	for year := cfg.StartYear; year <= cfg.EndYear; year++ {
 		fmt.Printf("\tProcessing year %d...\n", year)
-		targetURL := fmt.Sprintf("https://fantasy.nfl.com/league/%s/history/%d/settings", leagueId, year)
+		targetURL := fmt.Sprintf("https://fantasy.nfl.com/league/%s/history/%d/settings", cfg.LeagueID, year)
 		ctx := colly.NewContext()
 		ctx.Put("year", year)
 

@@ -1,4 +1,4 @@
-package main
+package config
 
 import (
 	"bufio"
@@ -11,12 +11,13 @@ import (
 	"github.com/joho/godotenv"
 )
 
-var (
-	leagueId  string
-	startYear int
-	endYear   int
-	nflCookie string
-)
+type Config struct {
+	LeagueID   string
+	LeagueName string
+	StartYear  int
+	EndYear    int
+	NFLCookie  string
+}
 
 func promptInput(prompt string) string {
 	fmt.Print(prompt)
@@ -36,54 +37,58 @@ func promptInt(prompt string) int {
 	}
 }
 
-func init() {
+func Load() *Config {
 	if err := godotenv.Load(); err != nil {
 		fmt.Println("No .env file found. Proceeding with interactive input.")
 	}
 
-	nflCookie = os.Getenv("NFL_COOKIE")
-	if nflCookie == "" {
-		nflCookie = promptInput("Enter fantasy.nfl.com cookie value (NFL_COOKIE): ")
+	cfg := &Config{}
+
+	cfg.NFLCookie = os.Getenv("NFL_COOKIE")
+	if cfg.NFLCookie == "" {
+		cfg.NFLCookie = promptInput("Enter fantasy.nfl.com cookie value (NFL_COOKIE): ")
 	}
 
-	leagueId = os.Getenv("LEAGUE_ID")
-	if leagueId == "" {
+	cfg.LeagueID = os.Getenv("LEAGUE_ID")
+	if cfg.LeagueID == "" {
 		for {
-			leagueId = promptInput("Enter league ID: ")
-			if _, err := strconv.Atoi(leagueId); err == nil {
+			cfg.LeagueID = promptInput("Enter league ID: ")
+			if _, err := strconv.Atoi(cfg.LeagueID); err == nil {
 				break
 			}
 			fmt.Println("Invalid input. Please enter an integer for league ID.")
 		}
 	} else {
-		if _, err := strconv.Atoi(leagueId); err != nil {
-			log.Fatalf("Invalid LEAGUE_ID '%s' in .env: must be an integer", leagueId)
+		if _, err := strconv.Atoi(cfg.LeagueID); err != nil {
+			log.Fatalf("Invalid LEAGUE_ID '%s' in .env: must be an integer", cfg.LeagueID)
 		}
 	}
 
 	sYearStr := os.Getenv("START_YEAR")
 	if sYearStr == "" {
-		startYear = promptInt("Enter start year: ")
+		cfg.StartYear = promptInt("Enter start year: ")
 	} else {
 		sYear, err := strconv.Atoi(sYearStr)
 		if err != nil {
 			log.Fatalf("Invalid START_YEAR '%s': must be an integer", sYearStr)
 		}
-		startYear = sYear
+		cfg.StartYear = sYear
 	}
 
 	eYearStr := os.Getenv("END_YEAR")
 	if eYearStr == "" {
-		endYear = promptInt("Enter end year: ")
+		cfg.EndYear = promptInt("Enter end year: ")
 	} else {
 		eYear, err := strconv.Atoi(eYearStr)
 		if err != nil {
 			log.Fatalf("Invalid END_YEAR '%s': must be an integer", eYearStr)
 		}
-		endYear = eYear
+		cfg.EndYear = eYear
 	}
 
-	if startYear > endYear {
-		log.Fatalf("START_YEAR (%d) cannot be greater than END_YEAR (%d)", startYear, endYear)
+	if cfg.StartYear > cfg.EndYear {
+		log.Fatalf("START_YEAR (%d) cannot be greater than END_YEAR (%d)", cfg.StartYear, cfg.EndYear)
 	}
+
+	return cfg
 }

@@ -1,8 +1,9 @@
-package main
+package scraper
 
 import (
 	"encoding/json"
 	"fmt"
+	"gonflfantasy/internal/config"
 	"log"
 	"net/url"
 	"os"
@@ -27,10 +28,10 @@ type Manager struct {
 	TeamImageURL    string  `json:"teamImgUrl"`
 }
 
-func scrapeManagers() {
+func ScrapeManagers(cfg *config.Config) {
 	startTime := time.Now()
 	fmt.Println("[MANAGERS] Starting managers history scraper...")
-	c := createColly(nil)
+	c := CreateColly(cfg, nil)
 
 	// Compile regex for extracting numeric IDs from class strings (e.g., "userId-12345")
 	userIDRegex := regexp.MustCompile(`userId-(\d+)`)
@@ -117,9 +118,9 @@ func scrapeManagers() {
 	})
 
 	// Loop through the years and visit URLs
-	for year := startYear; year <= endYear; year++ {
+	for year := cfg.StartYear; year <= cfg.EndYear; year++ {
 		fmt.Printf("\tProcessing year %d...\n", year)
-		targetURL := fmt.Sprintf("https://fantasy.nfl.com/league/%s/history/%d/owners", leagueId, year)
+		targetURL := fmt.Sprintf("https://fantasy.nfl.com/league/%s/history/%d/owners", cfg.LeagueID, year)
 
 		// Pass the year variable to the context so we can use it in the OnHTML callback
 		ctx := colly.NewContext()

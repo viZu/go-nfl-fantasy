@@ -1,8 +1,9 @@
-package main
+package scraper
 
 import (
 	"encoding/json"
 	"fmt"
+	"gonflfantasy/internal/config"
 	"log"
 	"os"
 	"regexp"
@@ -23,10 +24,10 @@ type EndStanding struct {
 
 var placeRegex = regexp.MustCompile(`place-(\d+)`)
 
-func scrapeEndStandings() {
+func ScrapeEndStandings(cfg *config.Config) {
 	startTime := time.Now()
 	fmt.Println("[END STANDINGS] Starting end standings scraper...")
-	c := createColly(&colly.LimitRule{
+	c := CreateColly(cfg, &colly.LimitRule{
 		DomainGlob:  "*fantasy.nfl.com*",
 		Parallelism: 2,
 	})
@@ -66,9 +67,9 @@ func scrapeEndStandings() {
 		}
 	})
 
-	for year := startYear; year <= endYear; year++ {
+	for year := cfg.StartYear; year <= cfg.EndYear; year++ {
 		fmt.Printf("\tProcessing year %d...\n", year)
-		targetURL := fmt.Sprintf("https://fantasy.nfl.com/league/%s/history/%d/standings", leagueId, year)
+		targetURL := fmt.Sprintf("https://fantasy.nfl.com/league/%s/history/%d/standings", cfg.LeagueID, year)
 		ctx := colly.NewContext()
 		ctx.Put("year", year)
 

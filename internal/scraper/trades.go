@@ -1,8 +1,9 @@
-package main
+package scraper
 
 import (
 	"encoding/json"
 	"fmt"
+	"gonflfantasy/internal/config"
 	"log"
 	"net/url"
 	"os"
@@ -51,11 +52,11 @@ var (
 	draftPickRegex  = regexp.MustCompile(`Draft Pick - (\d{4}) Rd (\d+)`)
 )
 
-func scrapeTrades() {
+func ScrapeTrades(cfg *config.Config) {
 	startTime := time.Now()
 	fmt.Println("[TRADES] Starting trades history scraper...")
 
-	c := createColly(&colly.LimitRule{
+	c := CreateColly(cfg, &colly.LimitRule{
 		DomainGlob:  "*fantasy.nfl.com*",
 		Parallelism: 2,
 	})
@@ -144,9 +145,9 @@ func scrapeTrades() {
 		mu.Unlock()
 	})
 
-	for year := startYear; year <= endYear; year++ {
+	for year := cfg.StartYear; year <= cfg.EndYear; year++ {
 		fmt.Printf("\tProcessing year %d...\n", year)
-		targetURL := fmt.Sprintf("https://fantasy.nfl.com/league/%s/history/%d/transactions?transactionType=trade", leagueId, year)
+		targetURL := fmt.Sprintf("https://fantasy.nfl.com/league/%s/history/%d/transactions?transactionType=trade", cfg.LeagueID, year)
 		ctx := colly.NewContext()
 		ctx.Put("year", year)
 

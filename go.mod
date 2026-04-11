@@ -1,4 +1,4 @@
-module untitled
+module gonflfantasy
 
 go 1.25
 

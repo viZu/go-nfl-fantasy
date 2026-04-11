@@ -1,8 +1,9 @@
-package main
+package scraper
 
 import (
 	"encoding/json"
 	"fmt"
+	"gonflfantasy/internal/config"
 	"log"
 	"os"
 	"regexp"
@@ -35,11 +36,11 @@ var playoffWeekRegex = regexp.MustCompile(`Week (\d+)`)
 var playoffWeekIndexRegex = regexp.MustCompile(`pw-(\d+)`)
 var playoffSeedRegex = regexp.MustCompile(`\((\d+)\)`)
 
-func scrapePlayoffs() {
+func ScrapePlayoffs(cfg *config.Config) {
 	startTime := time.Now()
 	fmt.Println("[PLAYOFFS] Starting playoffs history scraper...")
 
-	c := createColly(&colly.LimitRule{
+	c := CreateColly(cfg, &colly.LimitRule{
 		DomainGlob:  "*fantasy.nfl.com*",
 		Parallelism: 2,
 	})
@@ -130,10 +131,10 @@ func scrapePlayoffs() {
 		})
 	})
 
-	for year := startYear; year <= endYear; year++ {
+	for year := cfg.StartYear; year <= cfg.EndYear; year++ {
 		fmt.Printf("\tProcessing year %d...\n", year)
 		// Championship Bracket
-		champURL := fmt.Sprintf("https://fantasy.nfl.com/league/%s/history/%d/playoffs?bracketType=championship&standingsTab=playoffs", leagueId, year)
+		champURL := fmt.Sprintf("https://fantasy.nfl.com/league/%s/history/%d/playoffs?bracketType=championship&standingsTab=playoffs", cfg.LeagueID, year)
 		ctxChamp := colly.NewContext()
 		ctxChamp.Put("year", year)
 		ctxChamp.Put("bracketType", "Championship")
@@ -144,7 +145,7 @@ func scrapePlayoffs() {
 		}
 
 		// Consolation Bracket
-		consURL := fmt.Sprintf("https://fantasy.nfl.com/league/%s/history/%d/playoffs?bracketType=consolation&standingsTab=playoffs", leagueId, year)
+		consURL := fmt.Sprintf("https://fantasy.nfl.com/league/%s/history/%d/playoffs?bracketType=consolation&standingsTab=playoffs", cfg.LeagueID, year)
 		ctxCons := colly.NewContext()
 		ctxCons.Put("year", year)
 		ctxCons.Put("bracketType", "Consolation")
