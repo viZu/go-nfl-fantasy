@@ -145,7 +145,9 @@ func ScrapeManagers(cfg *config.Config) {
 	})
 
 	// Write to JSON file
-	file, err := os.Create("managers-history.json")
+	exportDir := fmt.Sprintf("%s-%s", cfg.LeagueID, cfg.SanitizedLeagueName())
+	os.MkdirAll(exportDir, 0755)
+	file, err := os.Create(fmt.Sprintf("%s/managers-history.json", exportDir))
 	if err != nil {
 		log.Printf("❌ [MANAGERS] Error creating managers-history.json: %v\n", err)
 		return

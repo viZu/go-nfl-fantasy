@@ -204,7 +204,9 @@ func ScrapeMatchups(cfg *config.Config) {
 	})
 
 	// Write to JSON file
-	file, err := os.Create("matchup-history.json")
+	exportDir := fmt.Sprintf("%s-%s", cfg.LeagueID, cfg.SanitizedLeagueName())
+	os.MkdirAll(exportDir, 0755)
+	file, err := os.Create(fmt.Sprintf("%s/matchup-history.json", exportDir))
 	if err != nil {
 		log.Printf("❌ [MATCHUPS] Error creating matchup-history.json: %v\n", err)
 		return

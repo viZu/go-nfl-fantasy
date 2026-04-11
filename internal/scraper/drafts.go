@@ -112,7 +112,9 @@ func ScrapeDrafts(cfg *config.Config) {
 	})
 
 	// Write to JSON file
-	file, err := os.Create("draft-history.json")
+	exportDir := fmt.Sprintf("%s-%s", cfg.LeagueID, cfg.SanitizedLeagueName())
+	os.MkdirAll(exportDir, 0755)
+	file, err := os.Create(fmt.Sprintf("%s/draft-history.json", exportDir))
 	if err != nil {
 		log.Printf("Error creating draft-history.json: %v\n", err)
 		return

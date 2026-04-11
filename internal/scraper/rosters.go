@@ -123,7 +123,9 @@ func ScrapeRosters(cfg *config.Config) {
 	})
 
 	// 4. Write to JSON file
-	file, err := os.Create("end-roster-history.json")
+	exportDir := fmt.Sprintf("%s-%s", cfg.LeagueID, cfg.SanitizedLeagueName())
+	os.MkdirAll(exportDir, 0755)
+	file, err := os.Create(fmt.Sprintf("%s/end-roster-history.json", exportDir))
 	if err != nil {
 		log.Printf("❌ [ROSTERS] Error creating end-roster-history.json: %v\n", err)
 		return

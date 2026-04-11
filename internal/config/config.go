@@ -37,6 +37,10 @@ func promptInt(prompt string) int {
 	}
 }
 
+func (c *Config) SanitizedLeagueName() string {
+	return strings.ReplaceAll(strings.ToLower(c.LeagueName), " ", "-")
+}
+
 func Load() *Config {
 	if err := godotenv.Load(); err != nil {
 		fmt.Println("No .env file found. Proceeding with interactive input.")

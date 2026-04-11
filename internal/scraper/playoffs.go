@@ -170,7 +170,9 @@ func ScrapePlayoffs(cfg *config.Config) {
 	})
 
 	// Write to JSON file
-	file, err := os.Create("playoff-history.json")
+	exportDir := fmt.Sprintf("%s-%s", cfg.LeagueID, cfg.SanitizedLeagueName())
+	os.MkdirAll(exportDir, 0755)
+	file, err := os.Create(fmt.Sprintf("%s/playoff-history.json", exportDir))
 	if err != nil {
 		log.Printf("❌ [PLAYOFFS] Error creating playoff-history.json: %v\n", err)
 		return

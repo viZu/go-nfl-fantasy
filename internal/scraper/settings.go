@@ -155,7 +155,9 @@ func ScrapeSettings(cfg *config.Config) {
 	})
 
 	// Write to JSON file
-	file, err := os.Create("settings-history.json")
+	exportDir := fmt.Sprintf("%s-%s", cfg.LeagueID, cfg.SanitizedLeagueName())
+	os.MkdirAll(exportDir, 0755)
+	file, err := os.Create(fmt.Sprintf("%s/settings-history.json", exportDir))
 	if err != nil {
 		log.Printf("❌ [SETTINGS] Error creating settings-history.json: %v\n", err)
 		return
