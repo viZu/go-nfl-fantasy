@@ -106,7 +106,7 @@ Once you are ready, run the executable from your terminal:
 ```
 *(If you are running from source, use `go run .`)*
 
-The scraper will asynchronously fetch all pages across the configured years and output the JSON data to your local directory.
+The scraper will asynchronously fetch all pages across the configured years and output the JSON data into a new subdirectory named `{LEAGUE_ID}-{league-name-sanitized}/` (e.g., `123456-my-awesome-league/`) within your current working directory.
 
 ## 4. Building the Project
 If you want to compile the binary from source, ensure you have Go 1.25 or higher installed.
