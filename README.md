@@ -73,9 +73,9 @@ Captures the trades executed between teams.
 - `transaction`: A list of exchanges detailing which team is sending to which (`from` / `to`) and the items being traded (`sends` array containing the `type` of player/draftPick, `playerId`, or `draftPick` details).
 
 ## 3. Usage Guide
-To use the scraper, you must provide it with access to your private league. You can do this by using a configuration file or by providing the information interactively when you run the program.
+To use the scraper, you must provide it with access to your private league via a configuration file (`.env`) or environment variables.
 
-### Option A: Configuration File (Recommended)
+### Configuration File
 1. **Create .env**:
    Copy the provided `.env.example` to a new file named `.env`:
    ```bash
@@ -88,9 +88,6 @@ To use the scraper, you must provide it with access to your private league. You 
    - `START_YEAR`: The first year you want to scrape (e.g., `2015`).
    - `END_YEAR`: The last year you want to scrape (e.g., `2023`).
    - `NFL_COOKIE`: Your authentication cookie. 
-
-### Option B: Interactive Input
-If no `.env` file is present, or if specific variables are missing, the program will automatically prompt you for these values in the terminal.
 
 ### How to get your NFL_COOKIE
 To get your authentication cookie, log into [fantasy.nfl.com](https://fantasy.nfl.com) in your browser:

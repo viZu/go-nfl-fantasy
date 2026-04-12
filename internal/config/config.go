@@ -1,8 +1,6 @@
 package config
 
 import (
-	"bufio"
-	"fmt"
 	"log"
 	"os"
 	"strconv"
@@ -19,58 +17,32 @@ type Config struct {
 	NFLCookie  string
 }
 
-func promptInput(prompt string) string {
-	fmt.Print(prompt)
-	reader := bufio.NewReader(os.Stdin)
-	text, _ := reader.ReadString('\n')
-	return strings.TrimSpace(text)
-}
-
-func promptInt(prompt string) int {
-	for {
-		text := promptInput(prompt)
-		val, err := strconv.Atoi(text)
-		if err == nil {
-			return val
-		}
-		fmt.Println("Invalid input. Please enter an integer.")
-	}
-}
-
 func (c *Config) SanitizedLeagueName() string {
 	return strings.ReplaceAll(strings.ToLower(c.LeagueName), " ", "-")
 }
 
 func Load() *Config {
 	if err := godotenv.Load(); err != nil {
-		fmt.Println("No .env file found. Proceeding with interactive input.")
+		log.Println("No .env file found. Relying on environment variables.")
 	}
 
 	cfg := &Config{}
 
 	cfg.NFLCookie = os.Getenv("NFL_COOKIE")
 	if cfg.NFLCookie == "" {
-		cfg.NFLCookie = promptInput("Enter fantasy.nfl.com cookie value (NFL_COOKIE): ")
+		log.Fatal("NFL_COOKIE environment variable is required.")
 	}
 
 	cfg.LeagueID = os.Getenv("LEAGUE_ID")
 	if cfg.LeagueID == "" {
-		for {
-			cfg.LeagueID = promptInput("Enter league ID: ")
-			if _, err := strconv.Atoi(cfg.LeagueID); err == nil {
-				break
-			}
-			fmt.Println("Invalid input. Please enter an integer for league ID.")
-		}
-	} else {
-		if _, err := strconv.Atoi(cfg.LeagueID); err != nil {
-			log.Fatalf("Invalid LEAGUE_ID '%s' in .env: must be an integer", cfg.LeagueID)
-		}
+		log.Fatal("LEAGUE_ID environment variable is required.")
+	} else if _, err := strconv.Atoi(cfg.LeagueID); err != nil {
+		log.Fatalf("Invalid LEAGUE_ID '%s': must be an integer", cfg.LeagueID)
 	}
 
 	sYearStr := os.Getenv("START_YEAR")
 	if sYearStr == "" {
-		cfg.StartYear = promptInt("Enter start year: ")
+		log.Fatal("START_YEAR environment variable is required.")
 	} else {
 		sYear, err := strconv.Atoi(sYearStr)
 		if err != nil {
@@ -81,7 +53,7 @@ func Load() *Config {
 
 	eYearStr := os.Getenv("END_YEAR")
 	if eYearStr == "" {
-		cfg.EndYear = promptInt("Enter end year: ")
+		log.Fatal("END_YEAR environment variable is required.")
 	} else {
 		eYear, err := strconv.Atoi(eYearStr)
 		if err != nil {
