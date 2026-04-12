@@ -18,27 +18,27 @@ jobs:
           - os: ubuntu-latest
             goos: linux
             goarch: amd64
-            binary_name: go-nfl-fantasy
+            binary_name: go-nfl-fantasy-linux-amd64
           - os: ubuntu-latest
             goos: linux
             goarch: arm64
-            binary_name: go-nfl-fantasy
+            binary_name: go-nfl-fantasy-linux-arm64
           - os: macos-latest
             goos: darwin
             goarch: amd64
-            binary_name: go-nfl-fantasy
+            binary_name: go-nfl-fantasy-macos-amd64
           - os: macos-latest
             goos: darwin
             goarch: arm64
-            binary_name: go-nfl-fantasy
+            binary_name: go-nfl-fantasy-macos-arm64
           - os: windows-latest
             goos: windows
             goarch: amd64
-            binary_name: go-nfl-fantasy
+            binary_name: go-nfl-fantasy-windows-amd64.exe
           - os: windows-latest
             goos: windows
             goarch: arm64
-            binary_name: go-nfl-fantasy
+            binary_name: go-nfl-fantasy-windows-arm64.exe
 
     steps:
       - name: Checkout Code
