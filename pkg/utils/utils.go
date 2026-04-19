@@ -90,7 +90,7 @@ func MapTeamAbbreviation(teamName string) string {
 		return "DAL"
 	case "New York Jets":
 		return "NYJ"
-	default:
-		return teamName
 	}
+
+	return teamName
 }

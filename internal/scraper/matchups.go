@@ -531,7 +531,6 @@ func mapMatchupStatToSleeper(nflKey string) string {
 		return "points"
 	}
 
-	fmt.Println("Unmappable statistics: " + nflKey)
 	return nflKey
 }
 
