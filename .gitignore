@@ -26,6 +26,7 @@ vendor/
 
 # created history json files
 *-history.json
+players.json
 
 # Binaries
 gonflfantasy

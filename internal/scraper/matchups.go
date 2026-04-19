@@ -20,11 +20,13 @@ import (
 )
 
 type MatchupHistory struct {
-	Year      int         `json:"year"`
-	MatchupID string      `json:"matchupId"`
-	Week      int         `json:"week"`
-	Team1     TeamMatchup `json:"team1"`
-	Team2     TeamMatchup `json:"team2"`
+	Year        int     `json:"year"`
+	Week        int     `json:"week"`
+	MatchupID   string  `json:"matchupId"`
+	Team1ID     string  `json:"team1Id"`
+	Team2ID     string  `json:"team2Id"`
+	Team1Points float32 `json:"team1Points"`
+	Team2Points float32 `json:"team2Points"`
 }
 
 type TeamMatchup struct {
@@ -41,7 +43,25 @@ type MatchupPlayer struct {
 	Team             string             `json:"team"`
 	TeamPosition     string             `json:"teamPos"`
 	Points           float32            `json:"points"`
-	Stats            map[string]float32 `json:"stats"`
+	Stats            map[string]float32 `json:"-"`
+}
+
+type PlayerMatchupStatistic struct {
+	Year      int                `json:"-"`
+	MatchupID string             `json:"matchup"`
+	TeamID    string             `json:"team"`
+	PlayerID  string             `json:"player"`
+	Position  string             `json:"pos"`
+	NFLTeam   string             `json:"nflTeam"`
+	Status    string             `json:"status"`
+	Points    float32            `json:"pts"`
+	Stats     map[string]float32 `json:"stats"`
+}
+
+type UniquePlayer struct {
+	PlayerID   string `json:"playerId"`
+	PlayerName string `json:"playerName"`
+	Position   string `json:"position"`
 }
 
 // Regex helpers
@@ -67,6 +87,8 @@ func ScrapeMatchups(cfg *config.Config) {
 	fmt.Println("[MATCHUPS] Starting matchups history scraper...")
 
 	var allMatchups []MatchupHistory
+	var allPlayerStats []PlayerMatchupStatistic
+	uniquePlayersMap := make(map[string]UniquePlayer)
 	var mu sync.Mutex
 
 	scheduleCollector := CreateColly(cfg, &colly.LimitRule{
@@ -171,12 +193,51 @@ func ScrapeMatchups(cfg *config.Config) {
 
 		mu.Lock()
 		allMatchups = append(allMatchups, MatchupHistory{
-			Year:      year,
-			MatchupID: matchupID,
-			Week:      week,
-			Team1:     t1,
-			Team2:     t2,
+			Year:        year,
+			Week:        week,
+			MatchupID:   matchupID,
+			Team1ID:     t1.TeamID,
+			Team2ID:     t2.TeamID,
+			Team1Points: t1.TotalPoints,
+			Team2Points: t2.TotalPoints,
 		})
+
+		for _, p := range t1.Players {
+			allPlayerStats = append(allPlayerStats, PlayerMatchupStatistic{
+				Year:      year,
+				MatchupID: matchupID,
+				TeamID:    t1.TeamID,
+				PlayerID:  p.PlayerID,
+				Position:  p.StartingPosition,
+				NFLTeam:   p.Team,
+				Status:    p.Status,
+				Points:    p.Points,
+				Stats:     p.Stats,
+			})
+			uniquePlayersMap[p.PlayerID] = UniquePlayer{
+				PlayerID:   p.PlayerID,
+				PlayerName: p.PlayerName,
+				Position:   p.TeamPosition,
+			}
+		}
+		for _, p := range t2.Players {
+			allPlayerStats = append(allPlayerStats, PlayerMatchupStatistic{
+				Year:      year,
+				MatchupID: matchupID,
+				TeamID:    t2.TeamID,
+				PlayerID:  p.PlayerID,
+				Position:  p.StartingPosition,
+				NFLTeam:   p.Team,
+				Status:    p.Status,
+				Points:    p.Points,
+				Stats:     p.Stats,
+			})
+			uniquePlayersMap[p.PlayerID] = UniquePlayer{
+				PlayerID:   p.PlayerID,
+				PlayerName: p.PlayerName,
+				Position:   p.TeamPosition,
+			}
+		}
 		mu.Unlock()
 	})
 
@@ -203,8 +264,17 @@ func ScrapeMatchups(cfg *config.Config) {
 		return allMatchups[i].MatchupID < allMatchups[j].MatchupID
 	})
 
+	// Sort player stats by MatchupID and then PlayerID
+	sort.Slice(allPlayerStats, func(i, j int) bool {
+		if allPlayerStats[i].MatchupID != allPlayerStats[j].MatchupID {
+			return allPlayerStats[i].MatchupID < allPlayerStats[j].MatchupID
+		}
+		return allPlayerStats[i].PlayerID < allPlayerStats[j].PlayerID
+	})
+
 	// Group matchups by year
 	matchupsByYear := groupMatchupsByYear(allMatchups)
+	playerStatsByYear := groupPlayerStatsByYear(allPlayerStats)
 	years := getSortedMatchupsYears(matchupsByYear)
 
 	// Write to JSON file per year
@@ -212,9 +282,38 @@ func ScrapeMatchups(cfg *config.Config) {
 	os.MkdirAll(exportDir, 0755)
 
 	for _, year := range years {
-		writeMatchupsYear(year, matchupsByYear[year], exportDir)
+		writeMatchupsYear(year, matchupsByYear[year], playerStatsByYear[year], exportDir)
 	}
+
+	// Build, sort, and write unique players
+	writeUniquePlayersFile(uniquePlayersMap, exportDir)
+
 	fmt.Printf("\t✅ Completed matchups history scraping (took %s)\n", time.Since(startTime))
+}
+
+func writeUniquePlayersFile(uniquePlayersMap map[string]UniquePlayer, exportDir string) {
+	var allUniquePlayers []UniquePlayer
+	for _, up := range uniquePlayersMap {
+		allUniquePlayers = append(allUniquePlayers, up)
+	}
+	sort.Slice(allUniquePlayers, func(i, j int) bool {
+		return allUniquePlayers[i].PlayerID < allUniquePlayers[j].PlayerID
+	})
+
+	playersFilePath := fmt.Sprintf("%s/players.json", exportDir)
+	playersFile, playersErr := os.Create(playersFilePath)
+	if playersErr != nil {
+		log.Printf("❌ [MATCHUPS] Error creating %s: %v\n", playersFilePath, playersErr)
+	} else {
+		defer playersFile.Close()
+		playersEncoder := json.NewEncoder(playersFile)
+		playersEncoder.SetIndent("", "  ")
+		if err := playersEncoder.Encode(allUniquePlayers); err != nil {
+			log.Printf("❌ [MATCHUPS] Error encoding unique players to JSON: %v\n", err)
+		} else {
+			fmt.Printf("\t✅ Successfully saved %d unique players to players.json\n", len(allUniquePlayers))
+		}
+	}
 }
 
 func groupMatchupsByYear(allMatchups []MatchupHistory) map[int][]MatchupHistory {
@@ -223,6 +322,14 @@ func groupMatchupsByYear(allMatchups []MatchupHistory) map[int][]MatchupHistory 
 		matchupsByYear[matchup.Year] = append(matchupsByYear[matchup.Year], matchup)
 	}
 	return matchupsByYear
+}
+
+func groupPlayerStatsByYear(allPlayerStats []PlayerMatchupStatistic) map[int][]PlayerMatchupStatistic {
+	statsByYear := make(map[int][]PlayerMatchupStatistic)
+	for _, stat := range allPlayerStats {
+		statsByYear[stat.Year] = append(statsByYear[stat.Year], stat)
+	}
+	return statsByYear
 }
 
 func getSortedMatchupsYears(matchupsByYear map[int][]MatchupHistory) []int {
@@ -234,10 +341,11 @@ func getSortedMatchupsYears(matchupsByYear map[int][]MatchupHistory) []int {
 	return years
 }
 
-func writeMatchupsYear(year int, yearMatchups []MatchupHistory, exportDir string) {
+func writeMatchupsYear(year int, yearMatchups []MatchupHistory, yearPlayerStats []PlayerMatchupStatistic, exportDir string) {
 	yearDir := fmt.Sprintf("%s/%d", exportDir, year)
 	os.MkdirAll(yearDir, 0755)
 
+	// Write Matchups
 	fileName := "matchup-history.json"
 	filePath := fmt.Sprintf("%s/%s", yearDir, fileName)
 	file, err := os.Create(filePath)
@@ -253,6 +361,24 @@ func writeMatchupsYear(year int, yearMatchups []MatchupHistory, exportDir string
 		log.Printf("❌ [MATCHUPS] Error encoding matchup history to JSON for year %d: %v\n", year, err)
 	} else {
 		fmt.Printf("\t✅ Successfully saved %d matchups to %d/%s\n", len(yearMatchups), year, fileName)
+	}
+
+	// Write Player Stats
+	statsFileName := "player-matchup-statistics-history.json"
+	statsFilePath := fmt.Sprintf("%s/%s", yearDir, statsFileName)
+	statsFile, statsErr := os.Create(statsFilePath)
+	if statsErr != nil {
+		log.Printf("❌ [MATCHUPS] Error creating %s: %v\n", statsFilePath, statsErr)
+		return
+	}
+	defer statsFile.Close()
+
+	statsEncoder := json.NewEncoder(statsFile)
+	statsEncoder.SetIndent("", "  ")
+	if err := statsEncoder.Encode(yearPlayerStats); err != nil {
+		log.Printf("❌ [MATCHUPS] Error encoding player stats to JSON for year %d: %v\n", year, err)
+	} else {
+		fmt.Printf("\t✅ Successfully saved %d player statistics to %d/%s\n", len(yearPlayerStats), year, statsFileName)
 	}
 }
 
@@ -290,6 +416,7 @@ func buildStatHeaders(table *colly.HTMLElement) []string {
 	table.DOM.Find("thead tr.last th").Each(func(i int, s *goquery.Selection) {
 		if s.HasClass("stat") {
 			statLabel := strings.ToLower(strings.TrimSpace(s.Find("span").Text()))
+			statLabel = strings.ReplaceAll(statLabel, " ", "_")
 			group := groupMap[i]
 
 			fullName := statLabel
@@ -358,6 +485,20 @@ func mapMatchupStatToSleeper(nflKey string) string {
 		return "safe"
 	case "defense_td":
 		return "def_td"
+	case "score_td":
+		return "def_td"
+	case "score_saf":
+		return "safe"
+	case "points_pts_allow":
+		return "pts_allow"
+	case "score_def_2pt_ret":
+		return "def_2pt"
+	case "turnover_fum_rec":
+		return "fum_rec"
+	case "turnover_int":
+		return "int"
+	case "tackles_sack":
+		return "sack"
 
 	// Misc
 	case "fumble_lost":
@@ -387,8 +528,8 @@ func parseMatchupPlayerRow(e *colly.HTMLElement, statHeaders []string) MatchupPl
 	teamPosition := ""
 	team := ""
 	if matches := playerTeamAndPositionRegex.FindStringSubmatch(teamPositionText); len(matches) > 1 {
-		teamPosition = matches[2]
-		team = matches[1]
+		teamPosition = matches[1]
+		team = matches[2]
 	} else {
 		if strings.Contains(teamPositionText, "DEF") {
 			team = utils.MapTeamAbbreviation(name)
