@@ -103,29 +103,55 @@ func ScrapeDrafts(cfg *config.Config) {
 
 	c.Wait()
 
-	// Sort by Year (ascending) and then by PickNumber (ascending)
-	sort.Slice(allPicks, func(i, j int) bool {
-		if allPicks[i].Year != allPicks[j].Year {
-			return allPicks[i].Year < allPicks[j].Year
-		}
-		return allPicks[i].PickNumber < allPicks[j].PickNumber
-	})
+	// Group drafts by year
+	draftsByYear := groupDraftsByYear(allPicks)
+	years := getSortedDraftYears(draftsByYear)
 
-	// Write to JSON file
+	// Write to JSON file per year
 	exportDir := fmt.Sprintf("%s-%s", cfg.LeagueID, cfg.SanitizedLeagueName())
 	os.MkdirAll(exportDir, 0755)
-	file, err := os.Create(fmt.Sprintf("%s/draft-history.json", exportDir))
+
+	for _, year := range years {
+		writeDraftYear(year, draftsByYear[year], exportDir)
+	}
+	fmt.Printf("\t✅ Completed draft history scraping (took %s)\n", time.Since(startTime))
+}
+
+func groupDraftsByYear(allPicks []DraftPick) map[int][]DraftPick {
+	draftsByYear := make(map[int][]DraftPick)
+	for _, pick := range allPicks {
+		draftsByYear[pick.Year] = append(draftsByYear[pick.Year], pick)
+	}
+	return draftsByYear
+}
+
+func getSortedDraftYears(draftsByYear map[int][]DraftPick) []int {
+	var years []int
+	for year := range draftsByYear {
+		years = append(years, year)
+	}
+	sort.Ints(years)
+	return years
+}
+
+func writeDraftYear(year int, yearPicks []DraftPick, exportDir string) {
+	yearDir := fmt.Sprintf("%s/%d", exportDir, year)
+	os.MkdirAll(yearDir, 0755)
+
+	fileName := "draft-history.json"
+	filePath := fmt.Sprintf("%s/%s", yearDir, fileName)
+	file, err := os.Create(filePath)
 	if err != nil {
-		log.Printf("Error creating draft-history.json: %v\n", err)
+		log.Printf("❌ [DRAFTS] Error creating %s: %v\n", filePath, err)
 		return
 	}
 	defer file.Close()
 
 	encoder := json.NewEncoder(file)
 	encoder.SetIndent("", "  ")
-	if err := encoder.Encode(allPicks); err != nil {
-		log.Printf("❌ [DRAFTS] Error encoding draft history to JSON: %v\n", err)
+	if err := encoder.Encode(yearPicks); err != nil {
+		log.Printf("❌ [DRAFTS] Error encoding draft history to JSON for year %d: %v\n", year, err)
 	} else {
-		fmt.Printf("\t✅ Successfully saved %d picks to draft-history.json (took %s)\n", len(allPicks), time.Since(startTime))
+		fmt.Printf("\t✅ Successfully saved %d picks to %d/%s\n", len(yearPicks), year, fileName)
 	}
 }

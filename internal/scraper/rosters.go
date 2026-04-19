@@ -122,22 +122,56 @@ func ScrapeRosters(cfg *config.Config) {
 		return idI < idJ
 	})
 
-	// 4. Write to JSON file
+	// Group rosters by year
+	rostersByYear := groupRostersByYear(allRosters)
+	years := getSortedRostersYears(rostersByYear)
+
+	// Write to JSON file per year
 	exportDir := fmt.Sprintf("%s-%s", cfg.LeagueID, cfg.SanitizedLeagueName())
 	os.MkdirAll(exportDir, 0755)
-	file, err := os.Create(fmt.Sprintf("%s/end-roster-history.json", exportDir))
+
+	for _, year := range years {
+		writeRostersYear(year, rostersByYear[year], exportDir)
+	}
+	fmt.Printf("\t✅ Completed end-of-season rosters scraping (took %s)\n", time.Since(startTime))
+}
+
+func groupRostersByYear(allRosters []TeamRoster) map[int][]TeamRoster {
+	rostersByYear := make(map[int][]TeamRoster)
+	for _, roster := range allRosters {
+		rostersByYear[roster.Year] = append(rostersByYear[roster.Year], roster)
+	}
+	return rostersByYear
+}
+
+func getSortedRostersYears(rostersByYear map[int][]TeamRoster) []int {
+	var years []int
+	for year := range rostersByYear {
+		years = append(years, year)
+	}
+	sort.Ints(years)
+	return years
+}
+
+func writeRostersYear(year int, yearRosters []TeamRoster, exportDir string) {
+	yearDir := fmt.Sprintf("%s/%d", exportDir, year)
+	os.MkdirAll(yearDir, 0755)
+
+	fileName := "end-roster-history.json"
+	filePath := fmt.Sprintf("%s/%s", yearDir, fileName)
+	file, err := os.Create(filePath)
 	if err != nil {
-		log.Printf("❌ [ROSTERS] Error creating end-roster-history.json: %v\n", err)
+		log.Printf("❌ [ROSTERS] Error creating %s: %v\n", filePath, err)
 		return
 	}
 	defer file.Close()
 
 	encoder := json.NewEncoder(file)
 	encoder.SetIndent("", "  ")
-	if err := encoder.Encode(allRosters); err != nil {
-		log.Printf("❌ [ROSTERS] Error encoding rosters to JSON: %v\n", err)
+	if err := encoder.Encode(yearRosters); err != nil {
+		log.Printf("❌ [ROSTERS] Error encoding rosters to JSON for year %d: %v\n", year, err)
 	} else {
-		fmt.Printf("\t✅ Successfully saved %d rosters to end-roster-history.json (took %s)\n", len(allRosters), time.Since(startTime))
+		fmt.Printf("\t✅ Successfully saved %d rosters to %d/%s\n", len(yearRosters), year, fileName)
 	}
 }
 

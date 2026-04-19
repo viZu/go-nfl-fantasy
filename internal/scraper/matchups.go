@@ -203,22 +203,56 @@ func ScrapeMatchups(cfg *config.Config) {
 		return allMatchups[i].MatchupID < allMatchups[j].MatchupID
 	})
 
-	// Write to JSON file
+	// Group matchups by year
+	matchupsByYear := groupMatchupsByYear(allMatchups)
+	years := getSortedMatchupsYears(matchupsByYear)
+
+	// Write to JSON file per year
 	exportDir := fmt.Sprintf("%s-%s", cfg.LeagueID, cfg.SanitizedLeagueName())
 	os.MkdirAll(exportDir, 0755)
-	file, err := os.Create(fmt.Sprintf("%s/matchup-history.json", exportDir))
+
+	for _, year := range years {
+		writeMatchupsYear(year, matchupsByYear[year], exportDir)
+	}
+	fmt.Printf("\t✅ Completed matchups history scraping (took %s)\n", time.Since(startTime))
+}
+
+func groupMatchupsByYear(allMatchups []MatchupHistory) map[int][]MatchupHistory {
+	matchupsByYear := make(map[int][]MatchupHistory)
+	for _, matchup := range allMatchups {
+		matchupsByYear[matchup.Year] = append(matchupsByYear[matchup.Year], matchup)
+	}
+	return matchupsByYear
+}
+
+func getSortedMatchupsYears(matchupsByYear map[int][]MatchupHistory) []int {
+	var years []int
+	for year := range matchupsByYear {
+		years = append(years, year)
+	}
+	sort.Ints(years)
+	return years
+}
+
+func writeMatchupsYear(year int, yearMatchups []MatchupHistory, exportDir string) {
+	yearDir := fmt.Sprintf("%s/%d", exportDir, year)
+	os.MkdirAll(yearDir, 0755)
+
+	fileName := "matchup-history.json"
+	filePath := fmt.Sprintf("%s/%s", yearDir, fileName)
+	file, err := os.Create(filePath)
 	if err != nil {
-		log.Printf("❌ [MATCHUPS] Error creating matchup-history.json: %v\n", err)
+		log.Printf("❌ [MATCHUPS] Error creating %s: %v\n", filePath, err)
 		return
 	}
 	defer file.Close()
 
 	encoder := json.NewEncoder(file)
 	encoder.SetIndent("", "  ")
-	if err := encoder.Encode(allMatchups); err != nil {
-		log.Printf("\t❌ [MATCHUPS] Error encoding matchup history to JSON: %v\n", err)
+	if err := encoder.Encode(yearMatchups); err != nil {
+		log.Printf("❌ [MATCHUPS] Error encoding matchup history to JSON for year %d: %v\n", year, err)
 	} else {
-		fmt.Printf("\t✅ Successfully saved %d matchups to matchup-history.json (took %s)\n", len(allMatchups), time.Since(startTime))
+		fmt.Printf("\t✅ Successfully saved %d matchups to %d/%s\n", len(yearMatchups), year, fileName)
 	}
 }
 

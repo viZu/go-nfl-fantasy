@@ -149,27 +149,56 @@ func ScrapeSettings(cfg *config.Config) {
 
 	c.Wait()
 
-	// Sort by Year
-	sort.Slice(allSettings, func(i, j int) bool {
-		return allSettings[i].Year < allSettings[j].Year
-	})
+	// Group settings by year
+	settingsByYear := groupSettingsByYear(allSettings)
+	years := getSortedSettingYears(settingsByYear)
 
-	// Write to JSON file
+	// Write to JSON file per year
 	exportDir := fmt.Sprintf("%s-%s", cfg.LeagueID, cfg.SanitizedLeagueName())
 	os.MkdirAll(exportDir, 0755)
-	file, err := os.Create(fmt.Sprintf("%s/settings-history.json", exportDir))
+
+	for _, year := range years {
+		writeSettingYear(year, settingsByYear[year], exportDir)
+	}
+	fmt.Printf("\t✅ Completed settings history scraping (took %s)\n", time.Since(startTime))
+}
+
+func groupSettingsByYear(allSettings []SeasonSettings) map[int][]SeasonSettings {
+	settingsByYear := make(map[int][]SeasonSettings)
+	for _, s := range allSettings {
+		settingsByYear[s.Year] = append(settingsByYear[s.Year], s)
+	}
+	return settingsByYear
+}
+
+func getSortedSettingYears(settingsByYear map[int][]SeasonSettings) []int {
+	var years []int
+	for year := range settingsByYear {
+		years = append(years, year)
+	}
+	sort.Ints(years)
+	return years
+}
+
+func writeSettingYear(year int, yearSettings []SeasonSettings, exportDir string) {
+	yearDir := fmt.Sprintf("%s/%d", exportDir, year)
+	os.MkdirAll(yearDir, 0755)
+
+	fileName := "settings-history.json"
+	filePath := fmt.Sprintf("%s/%s", yearDir, fileName)
+	file, err := os.Create(filePath)
 	if err != nil {
-		log.Printf("❌ [SETTINGS] Error creating settings-history.json: %v\n", err)
+		log.Printf("❌ [SETTINGS] Error creating %s: %v\n", filePath, err)
 		return
 	}
 	defer file.Close()
 
 	encoder := json.NewEncoder(file)
 	encoder.SetIndent("", "  ")
-	if err := encoder.Encode(allSettings); err != nil {
-		log.Printf("❌ [SETTINGS] Error encoding settings to JSON: %v\n", err)
+	if err := encoder.Encode(yearSettings); err != nil {
+		log.Printf("❌ [SETTINGS] Error encoding settings to JSON for year %d: %v\n", year, err)
 	} else {
-		fmt.Printf("\t✅ Successfully saved %d records to settings-history.json (took %s)\n", len(allSettings), time.Since(startTime))
+		fmt.Printf("\t✅ Successfully saved %d records to %d/%s\n", len(yearSettings), year, fileName)
 	}
 }
 

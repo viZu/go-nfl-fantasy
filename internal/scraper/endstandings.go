@@ -89,21 +89,55 @@ func ScrapeEndStandings(cfg *config.Config) {
 		return allStandings[i].Rank < allStandings[j].Rank
 	})
 
-	// Write to JSON file
+	// Group end standings by year
+	endStandingsByYear := groupEndStandingsByYear(allStandings)
+	years := getSortedEndStandingsYears(endStandingsByYear)
+
+	// Write to JSON file per year
 	exportDir := fmt.Sprintf("%s-%s", cfg.LeagueID, cfg.SanitizedLeagueName())
 	os.MkdirAll(exportDir, 0755)
-	file, err := os.Create(fmt.Sprintf("%s/end-standings-history.json", exportDir))
+
+	for _, year := range years {
+		writeEndStandingsYear(year, endStandingsByYear[year], exportDir)
+	}
+	fmt.Printf("\t✅ Completed end standings history scraping (took %s)\n", time.Since(startTime))
+}
+
+func groupEndStandingsByYear(allStandings []EndStanding) map[int][]EndStanding {
+	standingsByYear := make(map[int][]EndStanding)
+	for _, standing := range allStandings {
+		standingsByYear[standing.Year] = append(standingsByYear[standing.Year], standing)
+	}
+	return standingsByYear
+}
+
+func getSortedEndStandingsYears(standingsByYear map[int][]EndStanding) []int {
+	var years []int
+	for year := range standingsByYear {
+		years = append(years, year)
+	}
+	sort.Ints(years)
+	return years
+}
+
+func writeEndStandingsYear(year int, yearStandings []EndStanding, exportDir string) {
+	yearDir := fmt.Sprintf("%s/%d", exportDir, year)
+	os.MkdirAll(yearDir, 0755)
+
+	fileName := "end-standings-history.json"
+	filePath := fmt.Sprintf("%s/%s", yearDir, fileName)
+	file, err := os.Create(filePath)
 	if err != nil {
-		log.Printf("❌ [END STANDINGS] Error creating end-standings-history.json: %v\n", err)
+		log.Printf("❌ [END STANDINGS] Error creating %s: %v\n", filePath, err)
 		return
 	}
 	defer file.Close()
 
 	encoder := json.NewEncoder(file)
 	encoder.SetIndent("", "  ")
-	if err := encoder.Encode(allStandings); err != nil {
-		log.Printf("❌ [END STANDINGS] Error encoding end standings to JSON: %v\n", err)
+	if err := encoder.Encode(yearStandings); err != nil {
+		log.Printf("❌ [END STANDINGS] Error encoding end standings to JSON for year %d: %v\n", year, err)
 	} else {
-		fmt.Printf("\t✅ Successfully saved %d records to end-standings-history.json (took %s)\n", len(allStandings), time.Since(startTime))
+		fmt.Printf("\t✅ Successfully saved %d records to %d/%s\n", len(yearStandings), year, fileName)
 	}
 }

@@ -172,21 +172,55 @@ func ScrapeStandings(cfg *config.Config) {
 		return allDivisions[i].DivisionId < allDivisions[j].DivisionId
 	})
 
-	// Write to JSON file
+	// Group standings by year
+	standingsByYear := groupStandingsByYear(allDivisions)
+	years := getSortedStandingsYears(standingsByYear)
+
+	// Write to JSON file per year
 	exportDir := fmt.Sprintf("%s-%s", cfg.LeagueID, cfg.SanitizedLeagueName())
 	os.MkdirAll(exportDir, 0755)
-	file, err := os.Create(fmt.Sprintf("%s/regular-season-standings-history.json", exportDir))
+
+	for _, year := range years {
+		writeStandingsYear(year, standingsByYear[year], exportDir)
+	}
+	fmt.Printf("\t✅ Completed regular season standings scraping (took %s)\n", time.Since(startTime))
+}
+
+func groupStandingsByYear(allDivisions []DivisionStanding) map[int][]DivisionStanding {
+	standingsByYear := make(map[int][]DivisionStanding)
+	for _, division := range allDivisions {
+		standingsByYear[division.Year] = append(standingsByYear[division.Year], division)
+	}
+	return standingsByYear
+}
+
+func getSortedStandingsYears(standingsByYear map[int][]DivisionStanding) []int {
+	var years []int
+	for year := range standingsByYear {
+		years = append(years, year)
+	}
+	sort.Ints(years)
+	return years
+}
+
+func writeStandingsYear(year int, yearDivisions []DivisionStanding, exportDir string) {
+	yearDir := fmt.Sprintf("%s/%d", exportDir, year)
+	os.MkdirAll(yearDir, 0755)
+
+	fileName := "regular-season-standings-history.json"
+	filePath := fmt.Sprintf("%s/%s", yearDir, fileName)
+	file, err := os.Create(filePath)
 	if err != nil {
-		log.Printf("❌ [STANDINGS] Error creating regular-season-standings-history.json: %v\n", err)
+		log.Printf("❌ [STANDINGS] Error creating %s: %v\n", filePath, err)
 		return
 	}
 	defer file.Close()
 
 	encoder := json.NewEncoder(file)
 	encoder.SetIndent("", "  ")
-	if err := encoder.Encode(allDivisions); err != nil {
-		log.Printf("❌ [STANDINGS] Error encoding regular season standings to JSON: %v\n", err)
+	if err := encoder.Encode(yearDivisions); err != nil {
+		log.Printf("❌ [STANDINGS] Error encoding regular season standings to JSON for year %d: %v\n", year, err)
 	} else {
-		fmt.Printf("\t✅ Successfully saved %d division records to regular-season-standings-history.json (took %s)\n", len(allDivisions), time.Since(startTime))
+		fmt.Printf("\t✅ Successfully saved %d division records to %d/%s\n", len(yearDivisions), year, fileName)
 	}
 }

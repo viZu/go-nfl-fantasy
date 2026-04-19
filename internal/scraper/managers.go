@@ -144,21 +144,55 @@ func ScrapeManagers(cfg *config.Config) {
 		return idI < idJ
 	})
 
-	// Write to JSON file
+	// Group managers by year
+	managersByYear := groupManagersByYear(allManagers)
+	years := getSortedYears(managersByYear)
+
+	// Write to JSON file per year
 	exportDir := fmt.Sprintf("%s-%s", cfg.LeagueID, cfg.SanitizedLeagueName())
 	os.MkdirAll(exportDir, 0755)
-	file, err := os.Create(fmt.Sprintf("%s/managers-history.json", exportDir))
+
+	for _, year := range years {
+		writeYear(year, managersByYear[year], exportDir)
+	}
+	fmt.Printf("\t✅ Completed manager history scraping (took %s)\n", time.Since(startTime))
+}
+
+func groupManagersByYear(allManagers []Manager) map[int][]Manager {
+	managersByYear := make(map[int][]Manager)
+	for _, mgr := range allManagers {
+		managersByYear[mgr.Year] = append(managersByYear[mgr.Year], mgr)
+	}
+	return managersByYear
+}
+
+func getSortedYears(managersByYear map[int][]Manager) []int {
+	var years []int
+	for year := range managersByYear {
+		years = append(years, year)
+	}
+	sort.Ints(years)
+	return years
+}
+
+func writeYear(year int, yearManagers []Manager, exportDir string) {
+	yearDir := fmt.Sprintf("%s/%d", exportDir, year)
+	os.MkdirAll(yearDir, 0755)
+
+	fileName := "managers-history.json"
+	filePath := fmt.Sprintf("%s/%s", yearDir, fileName)
+	file, err := os.Create(filePath)
 	if err != nil {
-		log.Printf("❌ [MANAGERS] Error creating managers-history.json: %v\n", err)
+		log.Printf("❌ [MANAGERS] Error creating %s: %v\n", filePath, err)
 		return
 	}
 	defer file.Close()
 
 	encoder := json.NewEncoder(file)
 	encoder.SetIndent("", "  ")
-	if err := encoder.Encode(allManagers); err != nil {
-		log.Printf("❌ [MANAGERS] Error encoding manager history to JSON: %v\n", err)
+	if err := encoder.Encode(yearManagers); err != nil {
+		log.Printf("❌ [MANAGERS] Error encoding manager history to JSON for year %d: %v\n", year, err)
 	} else {
-		fmt.Printf("\t✅ Successfully saved %d managers to managers-history.json (took %s)\n", len(allManagers), time.Since(startTime))
+		fmt.Printf("\t✅ Successfully saved %d managers to %d/%s\n", len(yearManagers), year, fileName)
 	}
 }

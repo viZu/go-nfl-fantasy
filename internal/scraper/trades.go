@@ -173,22 +173,56 @@ func ScrapeTrades(cfg *config.Config) {
 		return allTrades[i].parsedDate.Before(allTrades[j].parsedDate)
 	})
 
-	// Write to JSON file
+	// Group trades by year
+	tradesByYear := groupTradesByYear(allTrades)
+	years := getSortedTradesYears(tradesByYear)
+
+	// Write to JSON file per year
 	exportDir := fmt.Sprintf("%s-%s", cfg.LeagueID, cfg.SanitizedLeagueName())
 	os.MkdirAll(exportDir, 0755)
-	file, err := os.Create(fmt.Sprintf("%s/trade-history.json", exportDir))
+
+	for _, year := range years {
+		writeTradesYear(year, tradesByYear[year], exportDir)
+	}
+	fmt.Printf("\t✅ Completed trades history scraping (took %s)\n", time.Since(startTime))
+}
+
+func groupTradesByYear(allTrades []TradeTransaction) map[int][]TradeTransaction {
+	tradesByYear := make(map[int][]TradeTransaction)
+	for _, trade := range allTrades {
+		tradesByYear[trade.Year] = append(tradesByYear[trade.Year], trade)
+	}
+	return tradesByYear
+}
+
+func getSortedTradesYears(tradesByYear map[int][]TradeTransaction) []int {
+	var years []int
+	for year := range tradesByYear {
+		years = append(years, year)
+	}
+	sort.Ints(years)
+	return years
+}
+
+func writeTradesYear(year int, yearTrades []TradeTransaction, exportDir string) {
+	yearDir := fmt.Sprintf("%s/%d", exportDir, year)
+	os.MkdirAll(yearDir, 0755)
+
+	fileName := "trade-history.json"
+	filePath := fmt.Sprintf("%s/%s", yearDir, fileName)
+	file, err := os.Create(filePath)
 	if err != nil {
-		log.Printf("❌ [TRADES] Error creating trade-history.json: %v\n", err)
+		log.Printf("❌ [TRADES] Error creating %s: %v\n", filePath, err)
 		return
 	}
 	defer file.Close()
 
 	encoder := json.NewEncoder(file)
 	encoder.SetIndent("", "  ")
-	if err := encoder.Encode(allTrades); err != nil {
-		log.Printf("❌ [TRADES] Error encoding trades to JSON: %v\n", err)
+	if err := encoder.Encode(yearTrades); err != nil {
+		log.Printf("❌ [TRADES] Error encoding trades to JSON for year %d: %v\n", year, err)
 	} else {
-		fmt.Printf("\t✅ Successfully saved %d trades to trade-history.json (took %s)\n", len(allTrades), time.Since(startTime))
+		fmt.Printf("\t✅ Successfully saved %d trades to %d/%s\n", len(yearTrades), year, fileName)
 	}
 }
 

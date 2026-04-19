@@ -169,21 +169,55 @@ func ScrapePlayoffs(cfg *config.Config) {
 		return allGames[i].Week < allGames[j].Week
 	})
 
-	// Write to JSON file
+	// Group playoff games by year
+	playoffsByYear := groupPlayoffsByYear(allGames)
+	years := getSortedPlayoffsYears(playoffsByYear)
+
+	// Write to JSON file per year
 	exportDir := fmt.Sprintf("%s-%s", cfg.LeagueID, cfg.SanitizedLeagueName())
 	os.MkdirAll(exportDir, 0755)
-	file, err := os.Create(fmt.Sprintf("%s/playoff-history.json", exportDir))
+
+	for _, year := range years {
+		writePlayoffsYear(year, playoffsByYear[year], exportDir)
+	}
+	fmt.Printf("\t✅ Completed playoff history scraping (took %s)\n", time.Since(startTime))
+}
+
+func groupPlayoffsByYear(allGames []PlayoffGame) map[int][]PlayoffGame {
+	playoffsByYear := make(map[int][]PlayoffGame)
+	for _, game := range allGames {
+		playoffsByYear[game.Year] = append(playoffsByYear[game.Year], game)
+	}
+	return playoffsByYear
+}
+
+func getSortedPlayoffsYears(playoffsByYear map[int][]PlayoffGame) []int {
+	var years []int
+	for year := range playoffsByYear {
+		years = append(years, year)
+	}
+	sort.Ints(years)
+	return years
+}
+
+func writePlayoffsYear(year int, yearGames []PlayoffGame, exportDir string) {
+	yearDir := fmt.Sprintf("%s/%d", exportDir, year)
+	os.MkdirAll(yearDir, 0755)
+
+	fileName := "playoff-history.json"
+	filePath := fmt.Sprintf("%s/%s", yearDir, fileName)
+	file, err := os.Create(filePath)
 	if err != nil {
-		log.Printf("❌ [PLAYOFFS] Error creating playoff-history.json: %v\n", err)
+		log.Printf("❌ [PLAYOFFS] Error creating %s: %v\n", filePath, err)
 		return
 	}
 	defer file.Close()
 
 	encoder := json.NewEncoder(file)
 	encoder.SetIndent("", "  ")
-	if err := encoder.Encode(allGames); err != nil {
-		log.Printf("❌ [PLAYOFFS] Error encoding playoff history to JSON: %v\n", err)
+	if err := encoder.Encode(yearGames); err != nil {
+		log.Printf("❌ [PLAYOFFS] Error encoding playoff history to JSON for year %d: %v\n", year, err)
 	} else {
-		fmt.Printf("\t✅ Successfully saved %d games to playoff-history.json (took %s)\n", len(allGames), time.Since(startTime))
+		fmt.Printf("\t✅ Successfully saved %d games to %d/%s\n", len(yearGames), year, fileName)
 	}
 }
