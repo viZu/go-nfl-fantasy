@@ -402,7 +402,9 @@ func buildStatHeaders(table *colly.HTMLElement) []string {
 		} else if strings.Contains(lowGroupName, "score") {
 			groupName = "score"
 		} else if strings.Contains(lowGroupName, "misc") {
-			groupName = ""
+			groupName = "misc"
+		} else if strings.Contains(lowGroupName, "fum") {
+			groupName = "fum"
 		}
 
 		colspanStr, _ := s.Attr("colspan")
@@ -424,7 +426,7 @@ func buildStatHeaders(table *colly.HTMLElement) []string {
 			group := groupMap[i]
 
 			fullName := statLabel
-			if group != "" && group != "fantasy" && group != "fum" {
+			if group != "" && group != "fantasy" {
 				fullName = group + "_" + statLabel
 			}
 			headers = append(headers, fullName)
@@ -467,6 +469,8 @@ func mapMatchupStatToSleeper(nflKey string) string {
 	// Kicking
 	case "pat_made":
 		return "xpm"
+	case "pat_miss":
+		return "xpmiss"
 	case "fg_made_0-19":
 		return "fgm_0_19"
 	case "fg_made_20-29":
@@ -501,18 +505,33 @@ func mapMatchupStatToSleeper(nflKey string) string {
 		return "fum_rec"
 	case "turnover_int":
 		return "int"
+	case "turnover_fum_f":
+		return "ff"
 	case "tackles_sack":
 		return "sack"
+	case "yards_yds_allow":
+		return "yds_allow"
+	case "kick_block":
+		return "blk_kick"
 
 	// Misc
-	case "fumble_lost":
+	case "fum_lost":
 		return "fum_lost"
 	case "return_td":
-		return "st_td"
+		return "def_st_td"
+	case "ret_td":
+		return "def_st_td"
+	case "return_yds":
+		return "kr_yd" // we use kickoff return yards since it is not possible to map otherwise
 	case "misc_2pt":
 		return "pass_2pt" // This is ambiguous in NFL but usually stored as 2pt
+	case "misc_fumtd":
+		return "fum_rec_td"
+	case "points":
+		return "points"
 	}
 
+	fmt.Println("Unmappable statistics: " + nflKey)
 	return nflKey
 }
 
