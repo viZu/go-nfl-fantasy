@@ -19,6 +19,8 @@ import (
 	"github.com/gocolly/colly"
 )
 
+// --- Exported JSON Structs ---
+
 type MatchupHistory struct {
 	Year        int     `json:"year"`
 	Week        int     `json:"week"`
@@ -27,23 +29,6 @@ type MatchupHistory struct {
 	Team2ID     string  `json:"team2Id"`
 	Team1Points float32 `json:"team1Points"`
 	Team2Points float32 `json:"team2Points"`
-}
-
-type TeamMatchup struct {
-	TeamID      string          `json:"teamId"`
-	TotalPoints float32         `json:"totalPoints"`
-	Players     []MatchupPlayer `json:"players"`
-}
-
-type MatchupPlayer struct {
-	PlayerID         string             `json:"id"`
-	PlayerName       string             `json:"name"`
-	Status           string             `json:"status"` // "ST", "BN", "RES"
-	StartingPosition string             `json:"pos"`
-	Team             string             `json:"team"`
-	TeamPosition     string             `json:"teamPos"`
-	Points           float32            `json:"points"`
-	Stats            map[string]float32 `json:"-"`
 }
 
 type PlayerMatchupStatistic struct {
@@ -62,6 +47,25 @@ type UniquePlayer struct {
 	PlayerID   string `json:"playerId"`
 	PlayerName string `json:"playerName"`
 	Position   string `json:"position"`
+}
+
+// --- Internal Parsing Structs ---
+
+type TeamMatchup struct {
+	TeamID      string
+	TotalPoints float32
+	Players     []MatchupPlayer
+}
+
+type MatchupPlayer struct {
+	PlayerID         string
+	PlayerName       string
+	Status           string // "ST", "BN", "RES"
+	StartingPosition string
+	Team             string
+	TeamPosition     string
+	Points           float32
+	Stats            map[string]float32
 }
 
 // Regex helpers

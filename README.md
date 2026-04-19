@@ -58,12 +58,31 @@ Captures the final end-of-season rank for each team after the playoffs.
 - `rank`: The final overall placement.
 - `teamId` / `teamName`: The team's identifier and name.
 
+### Players
+Captures a global mapping of all unique players encountered across all matchups. Stored in the root of the league folder as `players.json`.
+- `playerId`: The unique ID of the player.
+- `playerName`: The player's name.
+- `position`: The player's primary NFL position.
+
 ### Matchups
-Captures the weekly head-to-head games between teams.
+Captures the weekly head-to-head game results between teams.
 - `year`: The season year.
-- `matchupId`: A unique identifier for the matchup.
 - `week`: The NFL week.
-- `team1` / `team2`: The competing teams, each containing their `teamId` and `totalPoints` scored, plus a `players` list detailing each player's `id`, `name`, `status` (Starter, Bench, IR), `pos` (Starting Position), and real-life `team`.
+- `matchupId`: A unique identifier for the matchup.
+- `team1Id` / `team2Id`: The IDs of the competing teams.
+- `team1Points` / `team2Points`: The total points scored by each team.
+
+### Player Matchup Statistics
+Captures detailed individual player performances for each matchup.
+- `year`: The season year.
+- `matchupId`: The associated matchup.
+- `teamId`: The fantasy team the player was on.
+- `playerId`: The ID of the player.
+- `position`: The player's starting roster position (e.g., QB, BN, FLEX).
+- `nflTeam`: The player's real-life NFL team.
+- `status`: The player's roster status (Starter, Bench, IR).
+- `points`: Total fantasy points scored.
+- `stats`: A detailed map of the player's statistical achievements.
 
 ### Trades
 Captures the trades executed between teams.
@@ -104,6 +123,8 @@ Once you are ready, run the executable from your terminal:
 *(If you are running from source, use `go run .`)*
 
 The scraper will asynchronously fetch all pages across the configured years and output the JSON data into a new subdirectory named `{LEAGUE_ID}-{league-name-sanitized}/` (e.g., `123456-my-awesome-league/`) within your current working directory.
+
+Inside this folder, data is organized into year-specific subdirectories (e.g., `2023/`, `2024/`) containing files like `settings-history.json`, `matchup-history.json`, etc. Global mapping files, such as `players.json`, are saved directly in the root of the league directory.
 
 ## 4. Building the Project
 If you want to compile the binary from source, ensure you have Go 1.25 or higher installed.
