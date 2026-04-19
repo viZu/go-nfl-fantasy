@@ -17,8 +17,10 @@ import (
 )
 
 type TeamStanding struct {
+	Year          int     `json:"year"`
+	DivisionId    int     `json:"divisionId"`
+	DivisionName  string  `json:"divisionName"`
 	TeamID        string  `json:"teamId"`
-	TeamName      string  `json:"teamName"`
 	DivisionRank  int     `json:"divisionRank"`
 	OverallRank   int     `json:"overallRank"`
 	Wins          int     `json:"wins"`
@@ -28,15 +30,7 @@ type TeamStanding struct {
 	PointsAgainst float32 `json:"pointsAgainst"`
 }
 
-type DivisionStanding struct {
-	Year         int            `json:"year"`
-	DivisionId   int            `json:"divisionId"`
-	DivisionName string         `json:"divisionName"`
-	Teams        []TeamStanding `json:"teams"`
-}
-
 var recordRegex = regexp.MustCompile(`(\d+)-(\d+)-(\d+)`)
-var rankRegex = regexp.MustCompile(`(\d+)\s*\((\d+)\)`)
 var divisionRegex = regexp.MustCompile(`Division\s+(\d+):\s*(.*)`)
 
 func ScrapeStandings(cfg *config.Config) {
@@ -48,7 +42,7 @@ func ScrapeStandings(cfg *config.Config) {
 		Parallelism: 2,
 	})
 
-	var allDivisions []DivisionStanding
+	var allTeamStandings []TeamStanding
 	var mu sync.Mutex
 
 	c.OnHTML("#leagueHistoryStandings .bd", func(e *colly.HTMLElement) {
@@ -77,13 +71,6 @@ func ScrapeStandings(cfg *config.Config) {
 				}
 			}
 
-			division := DivisionStanding{
-				Year:         year,
-				DivisionId:   divisionId,
-				DivisionName: divisionName,
-				Teams:        make([]TeamStanding, 0),
-			}
-
 			el.ForEach("table tbody tr", func(_ int, tr *colly.HTMLElement) {
 				teamID := ""
 				teamIDClass := tr.ChildAttr(".teamName", "class")
@@ -91,15 +78,25 @@ func ScrapeStandings(cfg *config.Config) {
 					teamID = matches[1]
 				}
 
-				teamName := tr.ChildText(".teamName")
-
 				// Ranks
-				rankText := tr.ChildText(".teamRank")
+				rankNodes := tr.DOM.Find(".teamRank")
 				divRank := 0
 				overallRank := 0
-				if matches := rankRegex.FindStringSubmatch(rankText); len(matches) > 2 {
-					divRank, _ = strconv.Atoi(matches[1])
-					overallRank, _ = strconv.Atoi(matches[2])
+
+				if rankNodes.Length() > 0 {
+					if rankNodes.Length() >= 2 {
+						divRankText := strings.TrimSpace(rankNodes.Eq(1).Text())
+						if val, err := strconv.Atoi(divRankText); err == nil {
+							divRank = val
+							overallRank = val
+						}
+					}
+					if rankNodes.Length() >= 3 {
+						overallRankText := strings.Trim(rankNodes.Eq(2).Text(), "()")
+						if val, err := strconv.Atoi(overallRankText); err == nil {
+							overallRank = val
+						}
+					}
 				}
 
 				// Record
@@ -128,8 +125,10 @@ func ScrapeStandings(cfg *config.Config) {
 
 				if teamID != "" {
 					standing := TeamStanding{
+						Year:          year,
+						DivisionId:    divisionId,
+						DivisionName:  divisionName,
 						TeamID:        teamID,
-						TeamName:      teamName,
 						DivisionRank:  divRank,
 						OverallRank:   overallRank,
 						Wins:          wins,
@@ -138,15 +137,11 @@ func ScrapeStandings(cfg *config.Config) {
 						PointsFor:     ptsFor,
 						PointsAgainst: ptsAgainst,
 					}
-					division.Teams = append(division.Teams, standing)
+					mu.Lock()
+					allTeamStandings = append(allTeamStandings, standing)
+					mu.Unlock()
 				}
 			})
-
-			if len(division.Teams) > 0 {
-				mu.Lock()
-				allDivisions = append(allDivisions, division)
-				mu.Unlock()
-			}
 		})
 	})
 
@@ -164,16 +159,19 @@ func ScrapeStandings(cfg *config.Config) {
 
 	c.Wait()
 
-	// Sort by Year (ascending) and then by DivisionId (ascending)
-	sort.Slice(allDivisions, func(i, j int) bool {
-		if allDivisions[i].Year != allDivisions[j].Year {
-			return allDivisions[i].Year < allDivisions[j].Year
+	// Sort by Year (ascending), DivisionId (ascending), and OverallRank (ascending)
+	sort.Slice(allTeamStandings, func(i, j int) bool {
+		if allTeamStandings[i].Year != allTeamStandings[j].Year {
+			return allTeamStandings[i].Year < allTeamStandings[j].Year
 		}
-		return allDivisions[i].DivisionId < allDivisions[j].DivisionId
+		if allTeamStandings[i].DivisionId != allTeamStandings[j].DivisionId {
+			return allTeamStandings[i].DivisionId < allTeamStandings[j].DivisionId
+		}
+		return allTeamStandings[i].OverallRank < allTeamStandings[j].OverallRank
 	})
 
 	// Group standings by year
-	standingsByYear := groupStandingsByYear(allDivisions)
+	standingsByYear := groupStandingsByYear(allTeamStandings)
 	years := getSortedStandingsYears(standingsByYear)
 
 	// Write to JSON file per year
@@ -186,15 +184,15 @@ func ScrapeStandings(cfg *config.Config) {
 	fmt.Printf("\t✅ Completed regular season standings scraping (took %s)\n", time.Since(startTime))
 }
 
-func groupStandingsByYear(allDivisions []DivisionStanding) map[int][]DivisionStanding {
-	standingsByYear := make(map[int][]DivisionStanding)
-	for _, division := range allDivisions {
-		standingsByYear[division.Year] = append(standingsByYear[division.Year], division)
+func groupStandingsByYear(allStandings []TeamStanding) map[int][]TeamStanding {
+	standingsByYear := make(map[int][]TeamStanding)
+	for _, standing := range allStandings {
+		standingsByYear[standing.Year] = append(standingsByYear[standing.Year], standing)
 	}
 	return standingsByYear
 }
 
-func getSortedStandingsYears(standingsByYear map[int][]DivisionStanding) []int {
+func getSortedStandingsYears(standingsByYear map[int][]TeamStanding) []int {
 	var years []int
 	for year := range standingsByYear {
 		years = append(years, year)
@@ -203,7 +201,7 @@ func getSortedStandingsYears(standingsByYear map[int][]DivisionStanding) []int {
 	return years
 }
 
-func writeStandingsYear(year int, yearDivisions []DivisionStanding, exportDir string) {
+func writeStandingsYear(year int, yearStandings []TeamStanding, exportDir string) {
 	yearDir := fmt.Sprintf("%s/%d", exportDir, year)
 	os.MkdirAll(yearDir, 0755)
 
@@ -218,9 +216,9 @@ func writeStandingsYear(year int, yearDivisions []DivisionStanding, exportDir st
 
 	encoder := json.NewEncoder(file)
 	encoder.SetIndent("", "  ")
-	if err := encoder.Encode(yearDivisions); err != nil {
+	if err := encoder.Encode(yearStandings); err != nil {
 		log.Printf("❌ [STANDINGS] Error encoding regular season standings to JSON for year %d: %v\n", year, err)
 	} else {
-		fmt.Printf("\t✅ Successfully saved %d division records to %d/%s\n", len(yearDivisions), year, fileName)
+		fmt.Printf("\t✅ Successfully saved %d division records to %d/%s\n", len(yearStandings), year, fileName)
 	}
 }
