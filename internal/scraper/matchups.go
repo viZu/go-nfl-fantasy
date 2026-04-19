@@ -518,7 +518,7 @@ func mapMatchupStatToSleeper(nflKey string) string {
 	case "fum_lost":
 		return "fum_lost"
 	case "return_td":
-		return "def_st_td"
+		return "st_td"
 	case "ret_td":
 		return "def_st_td"
 	case "return_yds":
