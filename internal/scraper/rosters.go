@@ -19,20 +19,14 @@ import (
 
 var rosterTeamIDRegex = regexp.MustCompile(`teamId=(\d+)`)
 
-type TeamRoster struct {
-	Year    int            `json:"year"`
-	TeamID  string         `json:"teamId"`
-	Players []RosterPlayer `json:"players"`
-}
-
 type RosterPlayer struct {
-	StarterType    string  `json:"starterType"`
-	PlayerName     string  `json:"playerName"`
+	Year           int     `json:"year"`
+	TeamID         string  `json:"teamId"`
 	PlayerID       string  `json:"playerId"`
-	RosterPosition string  `json:"rosterPosition"`
-	Team           string  `json:"team"`
-	TeamPosition   string  `json:"teamPosition"`
-	Points         float32 `json:"points"`
+	StarterType    string  `json:"status"`
+	RosterPosition string  `json:"pos"`
+	Team           string  `json:"nflTeam"`
+	Points         float32 `json:"pts"`
 }
 
 func ScrapeRosters(cfg *config.Config) {
@@ -49,7 +43,7 @@ func ScrapeRosters(cfg *config.Config) {
 		Parallelism: 4,
 	})
 
-	var allRosters []TeamRoster
+	var allRosterPlayers []RosterPlayer
 	var mu sync.Mutex
 
 	// 1. Visit the Owners page to find all team links
@@ -75,25 +69,18 @@ func ScrapeRosters(cfg *config.Config) {
 			teamID = matches[1]
 		}
 
-		var players []RosterPlayer
-
 		// Iterate over all player tables (Offense, Kicker, Defense)
 		e.ForEach(".tableWrap table tbody tr", func(_ int, el *colly.HTMLElement) {
 			p := parseRosterPlayerRow(el)
 			if p.PlayerID != "" {
-				players = append(players, p)
+				p.Year = year
+				p.TeamID = teamID
+
+				mu.Lock()
+				allRosterPlayers = append(allRosterPlayers, p)
+				mu.Unlock()
 			}
 		})
-
-		if len(players) > 0 {
-			mu.Lock()
-			allRosters = append(allRosters, TeamRoster{
-				Year:    year,
-				TeamID:  teamID,
-				Players: players,
-			})
-			mu.Unlock()
-		}
 	})
 
 	// Start the process
@@ -113,17 +100,17 @@ func ScrapeRosters(cfg *config.Config) {
 	rosterCollector.Wait()
 
 	// 5. Sort by 1. Year and 2. TeamID (numeric)
-	sort.Slice(allRosters, func(i, j int) bool {
-		if allRosters[i].Year != allRosters[j].Year {
-			return allRosters[i].Year < allRosters[j].Year
+	sort.Slice(allRosterPlayers, func(i, j int) bool {
+		if allRosterPlayers[i].Year != allRosterPlayers[j].Year {
+			return allRosterPlayers[i].Year < allRosterPlayers[j].Year
 		}
-		idI, _ := strconv.Atoi(allRosters[i].TeamID)
-		idJ, _ := strconv.Atoi(allRosters[j].TeamID)
+		idI, _ := strconv.Atoi(allRosterPlayers[i].TeamID)
+		idJ, _ := strconv.Atoi(allRosterPlayers[j].TeamID)
 		return idI < idJ
 	})
 
 	// Group rosters by year
-	rostersByYear := groupRostersByYear(allRosters)
+	rostersByYear := groupRostersByYear(allRosterPlayers)
 	years := getSortedRostersYears(rostersByYear)
 
 	// Write to JSON file per year
@@ -136,15 +123,15 @@ func ScrapeRosters(cfg *config.Config) {
 	fmt.Printf("\t✅ Completed end-of-season rosters scraping (took %s)\n", time.Since(startTime))
 }
 
-func groupRostersByYear(allRosters []TeamRoster) map[int][]TeamRoster {
-	rostersByYear := make(map[int][]TeamRoster)
+func groupRostersByYear(allRosters []RosterPlayer) map[int][]RosterPlayer {
+	rostersByYear := make(map[int][]RosterPlayer)
 	for _, roster := range allRosters {
 		rostersByYear[roster.Year] = append(rostersByYear[roster.Year], roster)
 	}
 	return rostersByYear
 }
 
-func getSortedRostersYears(rostersByYear map[int][]TeamRoster) []int {
+func getSortedRostersYears(rostersByYear map[int][]RosterPlayer) []int {
 	var years []int
 	for year := range rostersByYear {
 		years = append(years, year)
@@ -153,7 +140,7 @@ func getSortedRostersYears(rostersByYear map[int][]TeamRoster) []int {
 	return years
 }
 
-func writeRostersYear(year int, yearRosters []TeamRoster, exportDir string) {
+func writeRostersYear(year int, yearRosters []RosterPlayer, exportDir string) {
 	yearDir := fmt.Sprintf("%s/%d", exportDir, year)
 	os.MkdirAll(yearDir, 0755)
 
@@ -192,7 +179,6 @@ func parseRosterPlayerRow(e *colly.HTMLElement) RosterPlayer {
 
 	// 4. Team and Position Info
 	teamPosText := e.ChildText(".playerNameAndInfo em")
-	teamPos := ""
 	team := ""
 	if matches := playerTeamAndPositionRegex.FindStringSubmatch(teamPosText); len(matches) > 1 {
 		part1 := matches[1]
@@ -200,17 +186,12 @@ func parseRosterPlayerRow(e *colly.HTMLElement) RosterPlayer {
 
 		if part2 == "DEF" {
 			team = utils.MapTeamAbbreviation(part1)
-			teamPos = "DEF"
 		} else {
-			team = part1
-			teamPos = part2
+			team = part2
 		}
 	} else {
 		if strings.Contains(teamPosText, "DEF") {
 			team = utils.MapTeamAbbreviation(name)
-			teamPos = "DEF"
-		} else {
-			teamPos = teamPosText
 		}
 	}
 
@@ -221,11 +202,9 @@ func parseRosterPlayerRow(e *colly.HTMLElement) RosterPlayer {
 
 	return RosterPlayer{
 		StarterType:    starterType,
-		PlayerName:     name,
 		PlayerID:       idStr,
 		RosterPosition: rosterPosMapped,
 		Team:           team,
-		TeamPosition:   teamPos,
 		Points:         float32(pts),
 	}
 }

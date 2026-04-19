@@ -35,7 +35,7 @@ type PlayerMatchupStatistic struct {
 	Year      int                `json:"-"`
 	MatchupID string             `json:"matchup"`
 	TeamID    string             `json:"team"`
-	PlayerID  string             `json:"player"`
+	PlayerID  string             `json:"playerId"`
 	Position  string             `json:"pos"`
 	NFLTeam   string             `json:"nflTeam"`
 	Status    string             `json:"status"`
