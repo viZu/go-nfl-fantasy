@@ -22,9 +22,9 @@ type PlayoffGame struct {
 	Round       int     `json:"round"`
 	RoundLabel  string  `json:"roundLabel"`
 	BracketType string  `json:"bracketType"`
-	Team1       string  `json:"team1"`
+	Team1       string  `json:"team1Id"`
 	Team1Seed   int     `json:"team1Seed"`
-	Team2       string  `json:"team2"`
+	Team2       string  `json:"team2Id"`
 	Team2Seed   int     `json:"team2Seed"`
 	Team1Points float32 `json:"team1Points"`
 	Team2Points float32 `json:"team2Points"`

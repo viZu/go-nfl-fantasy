@@ -33,8 +33,8 @@ type MatchupHistory struct {
 
 type PlayerMatchupStatistic struct {
 	Year      int                `json:"-"`
-	MatchupID string             `json:"matchup"`
-	TeamID    string             `json:"team"`
+	MatchupID string             `json:"matchupId"`
+	TeamID    string             `json:"teamId"`
 	PlayerID  string             `json:"playerId"`
 	Position  string             `json:"pos"`
 	NFLTeam   string             `json:"nflTeam"`
@@ -46,7 +46,7 @@ type PlayerMatchupStatistic struct {
 type UniquePlayer struct {
 	PlayerID   string `json:"playerId"`
 	PlayerName string `json:"playerName"`
-	Position   string `json:"position"`
+	Position   string `json:"pos"`
 }
 
 // --- Internal Parsing Structs ---
